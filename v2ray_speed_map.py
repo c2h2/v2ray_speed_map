@@ -10,10 +10,16 @@ import time
 #parse trojan
 from urllib.parse import urlparse, unquote
 
+import subprocess
+import socks
 
 #globals
-all_airports = []
-all_airports_extra = []
+test_url = 'http://ipv4.download.thinkbroadband.com/100MB.zip' #replace with your own url in config.json
+all_airport_dict_configs = [] #become a list of jsons of each airport
+all_airports_extra = [] #become a list of comments/ps of each airport
+all_airports_tcp_pings = [] #become a list of pings of each airport
+all_airports_google_pings = [] #become a list of site pings of each airport
+all_airports_dl_speeds = [] #become a list of download speeds of each airport
 
 def get_sub_links(urls):
     contents = []
@@ -112,16 +118,26 @@ def build_config_by_airport(airport, config_template):
         new_config["outbounds"][0]["settings"]["vnext"][0]["port"] = int(airport["port"])
         new_config["outbounds"][0]["settings"]["vnext"][0]["users"][0]["id"] = airport["id"]
         new_config["outbounds"][0]["settings"]["vnext"][0]["users"][0]["alterId"] = int(airport["aid"])
-        #json.dump(new_config, open(f"/tmp/v2ray_config{len(all_airports)}.json","w"), indent=2)
-        #json.dump(new_config, open(f"/tmp/v2ray_config{len(all_airports)}.json","w"), indent=2)
         new_config["comments"] = comments
         return new_config, comments
     return None, None
 
+def test_http_ping(url, timeout=6, times=0):
+    if times > 3:
+        return 9999
+    try:
+        start_time = time.time()
+        response = requests.get(url)
+        end_time = time.time()
+        duration_ms = (end_time - start_time) * 1000  # Convert to milliseconds
+        return round(duration_ms, 1)  # Return duration in ms, rounded to 1 decimal place
+    except Exception as e:
+        return test_http_ping(url, timeout=timeout, times=times+1)
+
 def test_tcp_ping(airport, timeout=5):
     host = airport["add"]
     port = int(airport["port"])
-    message = "hello"
+    dummy_message = "hello"
 
     try:
         # Create a socket object
@@ -129,40 +145,99 @@ def test_tcp_ping(airport, timeout=5):
             s.settimeout(timeout)
             s.connect((host, port))
 
-            # Send the message
             start_time = time.time()
-            s.sendall(message.encode())
+            s.sendall(dummy_message.encode())
 
-            # Wait for a response
             response = s.recv(1024)
             end_time = time.time()
-
-            # Calculate round-trip time
-            duration_ms = (end_time - start_time) * 1000  # Convert to milliseconds
+            
+            duration_ms = (end_time - start_time) * 1000 # Calculate round-trip time
             return round(duration_ms, 1)  # Return duration in ms, rounded to 1 decimal place
     except socket.timeout:
         return 9999
     except Exception as e:
-        return f"Failed: {e}"
+        return 9999
     
+def build_html_and_js():
+    #do this later.
+    pass
+
+def speedtest_download_file(socks_host, socks_port, url=test_url):
+    socks.set_default_proxy(socks.SOCKS5, socks_host, socks_port)  # Change to your SOCKS proxy settings
+    socket.socket = socks.socksocket
+
+    start_time = time.time()
+    response = requests.get(url, stream=True)
+    
+    total_length = response.headers.get('content-length')
+
+    if total_length is None:  # no content length header
+        print("Couldn't retrieve the file")
+    else:
+        try:
+            total_length = int(total_length)
+            bytes_downloaded = 0
+
+            for data in response.iter_content(chunk_size=4096):
+                bytes_downloaded += len(data)
+
+            end_time = time.time()
+            duration = end_time - start_time
+            speed_bps = bytes_downloaded / duration
+            speed_mbps = speed_bps / (1024 * 1024)  # Convert to Megabits per second
+
+            print(f"Download speed: {speed_mbps:.2f} Mbps")
+            return speed_mbps
+        except Exception as e:
+            return -1
 
 if __name__ == '__main__':
     config_template = json.load(open("template_vmess.json","r"))
     with open("config.json", "r") as f:
         config = json.load(f)
     contents = get_sub_links(config["urls"]) #become whole base64
+    test_url = config["test_url"]
     airports = parse_sub_links(contents) #become json of each airport, each "airports” is a jsons of a sub link.
 
-    # build configs for each airport
+    # build configs for each airport and
+    # test tcp ping for each airport
     if airports != None:    
         for idx, airport in enumerate(airports):
             airport_config, comments = build_config_by_airport(airport, config_template)
-            all_airports.append(airport_config) #become a list of jsons of each airport
+            all_airport_dict_configs.append(airport_config) #become a list of jsons of each airport
             all_airports_extra.append(comments)
             # test tcp ping for each airport    
             res = test_tcp_ping(airport)
             ps = airport["ps"]
             host = airport["add"]
             scheme = airport["scheme"]
+            all_airports_tcp_pings.append(res)
             print(f"{idx} {ps} -> {scheme} {host} = {res}ms")
             
+    #test google ping and speed for each airport
+    for idx, airport_config in enumerate(all_airport_dict_configs):
+        v2ray_config = airport_config
+        comments = all_airports_extra[idx]
+        with open("/tmp/config.json", "w") as f:
+            json.dump(v2ray_config, f, indent=4)
+        
+        #subprocess to run v2ray in background and kill later
+        cmd = "v2ray/v2ray run -c /tmp/config.json"
+        proc = subprocess.Popen(cmd, shell=True)
+        #run custom speed test
+        time.sleep(2)
+        ps = airport_config["comments"]
+        host = airport_config["outbounds"][0]["settings"]["vnext"][0]["address"]
+        scheme = airport_config["outbounds"][0]["protocol"]
+        socks_host = "localhost"
+        socks_port = airport_config["inbounds"][0]["port"]
+        print(f"{idx} {ps} -> {scheme} {host} testing pings = ", end="")
+        google_ping = test_http_ping("http://google.com") #dont use ssl handshake stuff. just use http ping
+        print(f"{google_ping}ms")
+        print(f"{idx} {ps} -> {scheme} {host} testing speed = ", end="")
+        mbps = round(speedtest_download_file(socks_host, socks_port),3)
+        print(f"{mbps}mbps")
+        proc.terminate()
+        all_airports_google_pings.append(google_ping)
+        all_airports_dl_speeds.append(mbps)
+    
