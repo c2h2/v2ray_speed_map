@@ -123,11 +123,11 @@ def build_config_by_airport(airport, config_template):
     return None, None
 
 def test_http_ping(url, timeout=6, times=0):
-    if times > 3:
+    if times >= 3:
         return 9999
     try:
         start_time = time.time()
-        response = requests.get(url)
+        response = requests.get(url, timeout=timeout)
         end_time = time.time()
         duration_ms = (end_time - start_time) * 1000  # Convert to milliseconds
         return round(duration_ms, 1)  # Return duration in ms, rounded to 1 decimal place
@@ -167,7 +167,7 @@ def speedtest_download_file(socks_host, socks_port, url=test_url):
     socket.socket = socks.socksocket
 
     start_time = time.time()
-    response = requests.get(url, stream=True)
+    response = requests.get(url, stream=True, timeout=60)
     
     total_length = response.headers.get('content-length')
 
@@ -231,10 +231,10 @@ if __name__ == '__main__':
         scheme = airport_config["outbounds"][0]["protocol"]
         socks_host = "localhost"
         socks_port = airport_config["inbounds"][0]["port"]
-        print(f"{idx} {ps} -> {scheme} {host} testing pings = ", end="")
+        print(f"{idx} {ps} -> {scheme} {host} testing pings = ", end="", flush=True)
         google_ping = test_http_ping("http://google.com") #dont use ssl handshake stuff. just use http ping
         print(f"{google_ping}ms")
-        print(f"{idx} {ps} -> {scheme} {host} testing speed = ", end="")
+        print(f"{idx} {ps} -> {scheme} {host} testing speed = ", end="", flush=True)
         mbps = round(speedtest_download_file(socks_host, socks_port),3)
         print(f"{mbps}mbps")
         proc.terminate()
