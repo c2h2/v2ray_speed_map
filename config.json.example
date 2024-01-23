@@ -1,5 +1,5 @@
 {
-    "urls": [
+    "sub_urls": [
         "https://example.com/asdf?sub=3",
         "https://example.com/asdf?sub=2"
     ],
