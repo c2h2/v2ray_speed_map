@@ -195,7 +195,7 @@ if __name__ == '__main__':
     config_template = json.load(open("template_vmess.json","r"))
     with open("config.json", "r") as f:
         config = json.load(f)
-    contents = get_sub_links(config["urls"]) #become whole base64
+    contents = get_sub_links(config["sub_urls"]) #become whole base64
     test_url = config["test_url"]
     airports = parse_sub_links(contents) #become json of each airport, each "airports” is a jsons of a sub link.
 
