@@ -6,12 +6,12 @@ cd v2ray
 
 wget -O v2ray.zip https://github.com/v2fly/v2ray-core/releases/download/v5.12.1/v2ray-linux-64.zip
 if [ $? -ne 0 ]; then
+    echo "v2ray download failed"
+    exit 1
+else
     unzip v2ray.zip  # Add this line to extract the downloaded v2ray.zip file
     chmod +x v2ray
     chmod +x v2ray
     echo "v2ray download successed"
     exit 0
-else
-    echo "v2ray download failed"
-    exit 1
 fi
