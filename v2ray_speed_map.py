@@ -119,12 +119,12 @@ def parse_sub_links(contents):
 def build_config_by_airport(airport, config_template):
     if airport["scheme"] == "vmess":     
         new_config = config_template
-        comments = airport["ps"].copy()
-        new_config["outbounds"][0]["settings"]["vnext"][0]["address"] = airport["add"].copy()
-        new_config["outbounds"][0]["settings"]["vnext"][0]["port"] = int(airport["port"]).copy()
-        new_config["outbounds"][0]["settings"]["vnext"][0]["users"][0]["id"] = airport["id"].copy()
-        new_config["outbounds"][0]["settings"]["vnext"][0]["users"][0]["alterId"] = int(airport["aid"]).copy()
-        new_config["comments"] = comments.copy()
+        comments = airport["ps"]
+        new_config["outbounds"][0]["settings"]["vnext"][0]["address"] = airport["add"]
+        new_config["outbounds"][0]["settings"]["vnext"][0]["port"] = int(airport["port"])
+        new_config["outbounds"][0]["settings"]["vnext"][0]["users"][0]["id"] = airport["id"]
+        new_config["outbounds"][0]["settings"]["vnext"][0]["users"][0]["alterId"] = int(airport["aid"])
+        new_config["comments"] = comments
         return new_config, comments
     return None, None
 
