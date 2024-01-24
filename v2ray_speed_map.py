@@ -12,6 +12,7 @@ from urllib.parse import urlparse, unquote
 
 import subprocess
 import socks
+import sys
 
 #globals
 test_url = 'http://ipv4.download.thinkbroadband.com/100MB.zip' #replace with your own url in config.json
@@ -196,10 +197,10 @@ def speedtest_download_file(socks_host, socks_port, url=test_url):
         except Exception as e:
             return -1
 
-def create_relay_json(airport_config, relay_template):#only vmess for now.
+def create_relay_dict(airport_config, relay_template):#only vmess for now.
     relay_dict=json.load(open(relay_template,"r"))
     relay_dict["outbounds"][0]=airport_config["outbounds"][0]
-    return json.dumps(relay_dict)
+    return relay_dict
     
     
 if __name__ == '__main__':
@@ -215,7 +216,7 @@ if __name__ == '__main__':
     if airports != None:    
         for idx, airport in enumerate(airports):
             airport_config, comments = build_config_by_airport(airport, config_template)
-            all_airport_dict_configs.append(airport_config) #become a list of jsons of each airport
+            all_airport_dict_configs.append(airport_config.copy()) #become a list of jsons of each airport
             all_airports_extra.append(comments)
             # test tcp ping for each airport    
             res = test_tcp_ping(airport)
@@ -236,9 +237,9 @@ if __name__ == '__main__':
                 json.dump(v2ray_config, f, indent=2)
         
         if create_relay_configs:
-            j=create_relay_json(airport_config, "relay_config.json")
+            d=create_relay_dict(airport_config, "relay_config.json")
             with open(f"{all_server_configs_dir}/v2ray_relay_config_{idx}.json", "w") as f:
-                json.dump(j, f, indent=2)
+                json.dump(d, f, indent=2)
     
         #subprocess to run v2ray in background and kill later
         cmd = f"v2ray/v2ray run -c {tmp_v2ray_config}"
