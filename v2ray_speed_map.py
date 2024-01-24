@@ -13,6 +13,7 @@ from urllib.parse import urlparse, unquote
 import subprocess
 from subprocess import DEVNULL, STDOUT, check_call
 import socks
+import os
 
 
 #globals
@@ -202,6 +203,7 @@ def build_html_and_js():
     pass
 
 def speedtest_download_file2(socks_host, socks_port):
+    timeout = 20
     url = configs["test_url"]
     socks.set_default_proxy(socks.SOCKS5, socks_host, socks_port)  # Change to your SOCKS proxy settings
     socket.socket = socks.socksocket
@@ -221,14 +223,14 @@ def speedtest_download_file2(socks_host, socks_port):
         speed_bps = bytes_downloaded / elapsed_time
         speed_kbps = speed_bps / 1024
         speed_mbps = speed_kbps / 1024
-        return speed_mbps
+        return round(speed_mbps*8,2)
     except requests.Timeout:
         # Calculate speed based on data downloaded so far
         elapsed_time = time.time() - start_time
         speed_bps = bytes_downloaded / elapsed_time
         speed_kbps = speed_bps / 1024
         speed_mbps = speed_kbps / 1024
-        return speed_mbps
+        return round(speed_mbps*8,2)
     except requests.RequestException as e:
         print(f"Error during request: {e}")
         return -1
