@@ -21,6 +21,11 @@ all_airports_tcp_pings = [] #become a list of pings of each airport
 all_airports_google_pings = [] #become a list of site pings of each airport
 all_airports_dl_speeds = [] #become a list of download speeds of each airport
 
+tmp_v2ray_config = "/tmp/v2_config.json"
+save_all_server_configs = True
+all_server_configs_dir = "/tmp"
+create_relay_configs = True
+
 def get_sub_links(urls):
     contents = []
     for url in urls:
@@ -191,6 +196,12 @@ def speedtest_download_file(socks_host, socks_port, url=test_url):
         except Exception as e:
             return -1
 
+def create_relay_json(airport_config, relay_template):#only vmess for now.
+    relay_dict=json.load(open(relay_template,"r"))
+    relay_dict["outbounds"][0]=airport_config["outbounds"][0]
+    return json.dumps(relay_dict)
+    
+    
 if __name__ == '__main__':
     config_template = json.load(open("template_vmess.json","r"))
     with open("config.json", "r") as f:
@@ -218,11 +229,19 @@ if __name__ == '__main__':
     for idx, airport_config in enumerate(all_airport_dict_configs):
         v2ray_config = airport_config
         comments = all_airports_extra[idx]
-        with open("/tmp/config.json", "w") as f:
-            json.dump(v2ray_config, f, indent=4)
+        with open(tmp_v2ray_config, "w") as f:
+            json.dump(v2ray_config, f, indent=2)
+        if save_all_server_configs:
+            with open(f"{all_server_configs_dir}/v2ray_config_{idx}.json", "w") as f:
+                json.dump(v2ray_config, f, indent=2)
         
+        if create_relay_configs:
+            j=create_relay_json(airport_config, "relay_config.json")
+            with open(f"{all_server_configs_dir}/v2ray_relay_config_{idx}.json", "w") as f:
+                json.dump(j, f, indent=2)
+    
         #subprocess to run v2ray in background and kill later
-        cmd = "v2ray/v2ray run -c /tmp/config.json"
+        cmd = f"v2ray/v2ray run -c {tmp_v2ray_config}"
         proc = subprocess.Popen(cmd, shell=True)
         #run custom speed test
         time.sleep(2)
