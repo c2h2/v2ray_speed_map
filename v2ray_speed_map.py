@@ -11,21 +11,17 @@ import time
 from urllib.parse import urlparse, unquote
 
 import subprocess
+from subprocess import DEVNULL, STDOUT, check_call
 import socks
-import sys
+
 
 #globals
-test_url = 'http://ipv4.download.thinkbroadband.com/100MB.zip' #replace with your own url in config.json
-all_airport_dict_configs = [] #become a list of jsons of each airport
-all_airports_extra = [] #become a list of comments/ps of each airport
-all_airports_tcp_pings = [] #become a list of pings of each airport
-all_airports_google_pings = [] #become a list of site pings of each airport
-all_airports_dl_speeds = [] #become a list of download speeds of each airport
-
-tmp_v2ray_config = "/tmp/v2_config.json"
+configs=[]
 save_all_server_configs = True
-all_server_configs_dir = "/tmp"
 create_relay_configs = True
+all_server_configs_dir = "/tmp"
+socks_start_port=1100
+
 
 def get_sub_links(urls):
     contents = []
@@ -116,9 +112,10 @@ def parse_sub_links(contents):
                 print(e)
     return airports
 
-def build_config_by_airport(airport, config_template):
+def build_config_by_airport(airport):
+    config_template=json.load(open(configs["template_vmess_client"],"r"))
     if airport["scheme"] == "vmess":     
-        new_config = config_template
+        new_config = config_template.copy()
         comments = airport["ps"]
         new_config["outbounds"][0]["settings"]["vnext"][0]["address"] = airport["add"]
         new_config["outbounds"][0]["settings"]["vnext"][0]["port"] = int(airport["port"])
@@ -128,21 +125,60 @@ def build_config_by_airport(airport, config_template):
         return new_config, comments
     return None, None
 
-def test_http_ping(url, timeout=6, times=0):
+def build_dicts_by_airports(airports):
+    
+    for airport in airports:
+        new_config, comment = build_config_by_airport(airport)
+        if new_config != None:
+            airport.update(new_config)
+            airport["comments"] = comment
+
+    new_configs = []
+    for airport in airports:
+        new_config, comment = build_config_by_airport(airport)
+        new_config["comments"] = comment
+        new_configs.append(new_config.copy())
+    return new_configs
+
+def get_relay_config_fn_by_id(id):
+    return f"{all_server_configs_dir}/v2ray_relay_config_{id}.json"
+
+def get_client_config_fn_by_id(id):
+    return f"{all_server_configs_dir}/v2ray_config_{id}.json"
+
+def build_client_json_configs(airport_dicts):
+    for idx, airport in enumerate(airport_dicts):
+        airport["inbounds"][0]["port"] = socks_start_port + idx
+        with open(get_client_config_fn_by_id(idx), "w") as f:
+            print(airport)
+            json.dump(airport, f, indent=2)
+
+def build_relay_json_configs(airport_dicts):
+    for idx, airport in enumerate(airport_dicts):
+        with open(get_relay_config_fn_by_id(idx), "w") as f:
+            json.dump(airport, f, indent=2)
+
+def test_http_ping(url, socks_host, socks_port, timeout=6, times=0):
     if times >= 3:
         return 9999
     try:
         start_time = time.time()
-        response = requests.get(url, timeout=timeout)
+        proxies = {'http': f"socks5://{socks_host}:{socks_port}", 'https': f"socks5://{socks_host}:{socks_port}"}
+        print(proxies)
+        resp = requests.get(url, proxies=proxies, timeout=timeout)
         end_time = time.time()
         duration_ms = (end_time - start_time) * 1000  # Convert to milliseconds
         return round(duration_ms, 1)  # Return duration in ms, rounded to 1 decimal place
     except Exception as e:
-        return test_http_ping(url, timeout=timeout, times=times+1)
+        print(e)
+        return test_http_ping(url, socks_host, socks_port, timeout=timeout, times=times+1)
 
 def test_tcp_ping(airport, timeout=5):
-    host = airport["add"]
-    port = int(airport["port"])
+    try:
+        host = airport["outbounds"][0]["settings"]["vnext"][0]["address"]
+        port = int(airport["outbounds"][0]["settings"]["vnext"][0]["port"])
+    except:
+        return -2
     dummy_message = "hello"
 
     try:
@@ -168,13 +204,13 @@ def build_html_and_js():
     #do this later.
     pass
 
-def speedtest_download_file(socks_host, socks_port, url=test_url):
+def speedtest_download_file(socks_host, socks_port):
+    url = configs["test_url"]
     socks.set_default_proxy(socks.SOCKS5, socks_host, socks_port)  # Change to your SOCKS proxy settings
     socket.socket = socks.socksocket
 
     start_time = time.time()
     response = requests.get(url, stream=True, timeout=60)
-    
     total_length = response.headers.get('content-length')
 
     if total_length is None:  # no content length header
@@ -197,67 +233,121 @@ def speedtest_download_file(socks_host, socks_port, url=test_url):
         except Exception as e:
             return -1
 
+def test_tcp_pings(airport_dicts):
+    tcp_pings = []
+    for idx, airport in enumerate(airport_dicts):
+        ping = test_tcp_ping(airport)
+        tcp_pings.append(ping)
+        try:
+            print(f"{idx} {airport_dicts[idx]['comments']} {ping} ms.")
+        except: #not an airport
+            pass
+    
+    return tcp_pings
+
+def test_google_pings(airport_dicts):
+    google_pings = []
+    for idx, airport in enumerate(airport_dicts):
+        socks_host = "localhost"
+        socks_port = airport["inbounds"][0]["port"]
+        print(f"Testing {socks_host}:{socks_port} -> google.com")
+        res = test_http_ping("http://google.com", socks_host, socks_port)
+        print(f"{idx} {airport['comments']} -> google.com = {res}ms")
+        google_pings.append(res)
+        try:
+            print(f"{idx} {airport['ps']} -> {airport['scheme']} {airport['add']} = {res}ms")
+        except: #not an airport
+            pass
+    return google_pings
+
+def test_speeds(airport_dicts):
+    speeds = []
+    for idx, airport in enumerate(airport_dicts):
+        res = speedtest_download_file("localhost", airport["inbounds"][0]["port"])
+        speeds.append(res)
+        print(f"{idx} {airport['ps']} -> {airport['scheme']} {airport['add']} = {res}mbps")
+    return speeds
+
 def create_relay_dict(airport_config, relay_template):#only vmess for now.
     relay_dict=json.load(open(relay_template,"r"))
     relay_dict["outbounds"][0]=airport_config["outbounds"][0].copy()
     return relay_dict
-    
-    
-if __name__ == '__main__':
-    config_template = json.load(open("template_vmess.json","r"))
-    with open("config.json", "r") as f:
-        config = json.load(f)
-    contents = get_sub_links(config["sub_urls"]) #become whole base64
-    test_url = config["test_url"]
-    airports = parse_sub_links(contents) #become json of each airport, each "airports” is a jsons of a sub link.
 
-    # build configs for each airport and
-    # test tcp ping for each airport
-    if airports != None:    
-        for idx, airport in enumerate(airports):
-            airport_config, comments = build_config_by_airport(airport, config_template)
-            all_airport_dict_configs.append(airport_config.copy()) #become a list of jsons of each airport
-            all_airports_extra.append(comments)
-            # test tcp ping for each airport    
-            res = test_tcp_ping(airport)
-            ps = airport["ps"]
-            host = airport["add"]
-            scheme = airport["scheme"]
-            all_airports_tcp_pings.append(res)
-            print(f"{idx} {ps} -> {scheme} {host} = {res}ms")
-            
-    #test google ping and speed for each airport
-    for idx, airport_config in enumerate(all_airport_dict_configs):
-        v2ray_config = airport_config
-        comments = all_airports_extra[idx]
-        with open(tmp_v2ray_config, "w") as f:
-            json.dump(v2ray_config, f, indent=2)
-        if save_all_server_configs:
-            with open(f"{all_server_configs_dir}/v2ray_config_{idx}.json", "w") as f:
-                json.dump(v2ray_config, f, indent=2)
-        
-        if create_relay_configs:
-            d=create_relay_dict(airport_config, "relay_config.json")
-            with open(f"{all_server_configs_dir}/v2ray_relay_config_{idx}.json", "w") as f:
-                json.dump(d, f, indent=2)
+def usage():
+    print("usage: python3 v2ray_speed_map.py [config.json]")
+
+def establish_v2ray_connetions(airport_dicts):
+    procs=[]
+    for idx, airport in enumerate(airport_dicts):
+        if airport["outbounds"][0]["protocol"] == "vmess":
+            cmd = f"v2ray/v2ray run -c {get_client_config_fn_by_id(idx)}"
+            print(cmd)
+            procs.append(subprocess.Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL))
+    return procs
+
+#this program read sublinks from config.json, it will produce client configs for speed and ping test, and relay configs, it follows:
+#load config
+#dl sub links
+#parse sub links
+#convert links b64 to dict
+#convert to v2ray client config json files
+#convert to v2ray relay config json files
+#test tcp ping
+#establish v2ray client link
+#test google ping
+#test speed
+#build big 2d table of all results, （airport ps, scheme, host, port, tcp ping, google ping, speed mbps）
+#choose optimal relay configs
+#build html and js，save results to json dump
+
+
+if __name__ == '__main__':
+    airport_res_dicts = []
+    #load config
+    with open("config.json", "r") as f: configs = json.load(f)
+    #dl sub links   
+    print("Downloading sub links...", end="") 
+    contents = get_sub_links(configs["sub_urls"]) #become whole base64
+    print("done")
+    #parse sub links
+    airports = parse_sub_links(contents) #become json of each airport, each "airports” is a jsons of a sub link.
+    #convert links b64 to dict
+    airport_dicts = build_dicts_by_airports(airports)
+    #convert to v2ray client config json files
+    build_client_json_configs(airport_dicts)
+    #convert to v2ray relay config json files
+    build_relay_json_configs(airport_dicts)
+    #test tcp pings
+    print("Testing tcp pings...")
+    tcp_pings = test_tcp_pings(airport_dicts)
+    print("done tcp pings")
+    #establish v2ray client link
+    establish_v2ray_connetions(airport_dicts)
+    #test google pings
+    print("Testing google pings...")
+    google_pings = test_google_pings(airport_dicts)
+    print("done google pings")
+    #test speeds
+    print("Testing dl speeds...")
+    speed_mbps = test_speeds(airport_dicts)
+    print("done")
+
+    #build big 2d table of all results, （airport ps, scheme, host, port, tcp ping, google ping, speed mbps）
+    for idx, airport in enumerate(airport_dicts):
+        airport_res_dicts.append({})
+        airport_res_dicts[-1]["airport"] = airport.copy()
+        airport_res_dicts[-1]["tcp_ping"] = tcp_pings[idx]
+        airport_res_dicts[-1]["google_ping"] = google_pings[idx]
+        airport_res_dicts[-1]["speed_mbps"] = speed_mbps[idx]
+
+    #save results to json dump, file name is YYYY-MM-DD-HH-MM-SS_v2ray_results.json, path is results/ relative to this script.
+    with open(f"results/{time.strftime('%Y-%m-%d-%H-%M-%S')}_v2ray_results.json", "w") as f:
+        json.dump(airport_res_dicts, f, indent=2)
+       
+
+    #choose optimal relay configs
     
-        #subprocess to run v2ray in background and kill later
-        cmd = f"v2ray/v2ray run -c {tmp_v2ray_config}"
-        proc = subprocess.Popen(cmd, shell=True)
-        #run custom speed test
-        time.sleep(2)
-        ps = airport_config["comments"]
-        host = airport_config["outbounds"][0]["settings"]["vnext"][0]["address"]
-        scheme = airport_config["outbounds"][0]["protocol"]
-        socks_host = "localhost"
-        socks_port = airport_config["inbounds"][0]["port"]
-        print(f"{idx} {ps} -> {scheme} {host} testing pings = ", end="", flush=True)
-        google_ping = test_http_ping("http://google.com") #dont use ssl handshake stuff. just use http ping
-        print(f"{google_ping}ms")
-        print(f"{idx} {ps} -> {scheme} {host} testing speed = ", end="", flush=True)
-        mbps = round(speedtest_download_file(socks_host, socks_port),3)
-        print(f"{mbps}mbps")
-        proc.terminate()
-        all_airports_google_pings.append(google_ping)
-        all_airports_dl_speeds.append(mbps)
+    
+    #build html and js
+        
     

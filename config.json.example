@@ -3,5 +3,7 @@
         "https://example.com/asdf?sub=3",
         "https://example.com/asdf?sub=2"
     ],
-    "test_url": "http://ipv4.download.thinkbroadband.com/100MB.zip"
+    "test_url": "http://ipv4.download.thinkbroadband.com/100MB.zip",
+    "template_vmess_client": "template_vmess_client.json",
+    "template_relay": "template_relay.json"
   }
