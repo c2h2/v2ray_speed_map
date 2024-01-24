@@ -150,7 +150,6 @@ def build_client_json_configs(airport_dicts):
     for idx, airport in enumerate(airport_dicts):
         airport["inbounds"][0]["port"] = socks_start_port + idx
         with open(get_client_config_fn_by_id(idx), "w") as f:
-            print(airport)
             json.dump(airport, f, indent=2)
 
 def build_relay_json_configs(airport_dicts):
@@ -163,14 +162,12 @@ def test_http_ping(url, socks_host, socks_port, timeout=6, times=0):
         return 9999
     try:
         start_time = time.time()
-        proxies = {'http': f"socks5://{socks_host}:{socks_port}", 'https': f"socks5://{socks_host}:{socks_port}"}
-        print(proxies)
+        proxies = {'http': f"socks5h://{socks_host}:{socks_port}", 'https': f"socks5h://{socks_host}:{socks_port}"}
         resp = requests.get(url, proxies=proxies, timeout=timeout)
         end_time = time.time()
         duration_ms = (end_time - start_time) * 1000  # Convert to milliseconds
         return round(duration_ms, 1)  # Return duration in ms, rounded to 1 decimal place
     except Exception as e:
-        print(e)
         return test_http_ping(url, socks_host, socks_port, timeout=timeout, times=times+1)
 
 def test_tcp_ping(airport, timeout=5):
@@ -204,6 +201,38 @@ def build_html_and_js():
     #do this later.
     pass
 
+def speedtest_download_file2(socks_host, socks_port):
+    url = configs["test_url"]
+    socks.set_default_proxy(socks.SOCKS5, socks_host, socks_port)  # Change to your SOCKS proxy settings
+    socket.socket = socks.socksocket
+
+    start_time = time.time()
+    bytes_downloaded = 0
+    try:
+        with requests.get(url, stream=True, timeout=timeout) as r:
+            r.raise_for_status()
+            for chunk in r.iter_content(chunk_size=8192): 
+                if chunk:
+                    bytes_downloaded += len(chunk)
+                    current_time = time.time()
+                    if current_time - start_time > timeout:
+                        break
+        elapsed_time = time.time() - start_time
+        speed_bps = bytes_downloaded / elapsed_time
+        speed_kbps = speed_bps / 1024
+        speed_mbps = speed_kbps / 1024
+        return speed_mbps
+    except requests.Timeout:
+        # Calculate speed based on data downloaded so far
+        elapsed_time = time.time() - start_time
+        speed_bps = bytes_downloaded / elapsed_time
+        speed_kbps = speed_bps / 1024
+        speed_mbps = speed_kbps / 1024
+        return speed_mbps
+    except requests.RequestException as e:
+        print(f"Error during request: {e}")
+        return -1
+
 def speedtest_download_file(socks_host, socks_port):
     url = configs["test_url"]
     socks.set_default_proxy(socks.SOCKS5, socks_host, socks_port)  # Change to your SOCKS proxy settings
@@ -226,9 +255,8 @@ def speedtest_download_file(socks_host, socks_port):
             end_time = time.time()
             duration = end_time - start_time
             speed_bps = bytes_downloaded / duration
-            speed_mbps = speed_bps / (1024 * 1024)  # Convert to Megabits per second
-
-            print(f"Download speed: {speed_mbps:.2f} Mbps")
+            speed_mbps = speed_bps / (1024 * 1024) * 8 # Convert to Megabits per second
+            speed_mbps = round(speed_mbps, 1)
             return speed_mbps
         except Exception as e:
             return -1
@@ -252,20 +280,21 @@ def test_google_pings(airport_dicts):
         socks_port = airport["inbounds"][0]["port"]
         print(f"Testing {socks_host}:{socks_port} -> google.com")
         res = test_http_ping("http://google.com", socks_host, socks_port)
-        print(f"{idx} {airport['comments']} -> google.com = {res}ms")
+        print(f"{idx} {airport['comments']} -> google.com = {res} ms")
         google_pings.append(res)
-        try:
-            print(f"{idx} {airport['ps']} -> {airport['scheme']} {airport['add']} = {res}ms")
-        except: #not an airport
-            pass
     return google_pings
 
 def test_speeds(airport_dicts):
     speeds = []
     for idx, airport in enumerate(airport_dicts):
-        res = speedtest_download_file("localhost", airport["inbounds"][0]["port"])
+        try:
+            res = speedtest_download_file2("localhost", airport["inbounds"][0]["port"])
+        except:
+            res = -1
         speeds.append(res)
-        print(f"{idx} {airport['ps']} -> {airport['scheme']} {airport['add']} = {res}mbps")
+        scheme = airport["outbounds"][0]["protocol"]
+        address = airport["outbounds"][0]["settings"]["vnext"][0]["address"]
+        print(f"{idx} {airport['comments']} -> {scheme} {address} = {res} Mbps")
     return speeds
 
 def create_relay_dict(airport_config, relay_template):#only vmess for now.
@@ -273,8 +302,23 @@ def create_relay_dict(airport_config, relay_template):#only vmess for now.
     relay_dict["outbounds"][0]=airport_config["outbounds"][0].copy()
     return relay_dict
 
+def test_public_ip(airport_dicts):
+    ips = []
+    for idx, airport in enumerate(airport_dicts):
+        socks_host = "localhost"
+        socks_port = airport["inbounds"][0]["port"]
+        proxies = {'http': f"socks5h://{socks_host}:{socks_port}", 'https': f"socks5h://{socks_host}:{socks_port}"}
+        try:
+            res = requests.get("http://ifconfig.me", proxies=proxies, timeout=5).text
+            print(f"{idx} {airport['comments']} -> IP = {res}")
+        except:
+            res = "FAILED"
+        ips.append(res)
+    return ips
+
 def usage():
-    print("usage: python3 v2ray_speed_map.py [config.json]")
+    print("usage: python3 v2ray_speed_map.py")
+    print("example configs need to be copid to jsons and in the same directory as this script.")
 
 def establish_v2ray_connetions(airport_dicts):
     procs=[]
@@ -284,6 +328,10 @@ def establish_v2ray_connetions(airport_dicts):
             print(cmd)
             procs.append(subprocess.Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL))
     return procs
+
+def kill_v2ray_connetions(procs):
+    for proc in procs:
+        proc.kill()
 
 #this program read sublinks from config.json, it will produce client configs for speed and ping test, and relay configs, it follows:
 #load config
@@ -296,6 +344,7 @@ def establish_v2ray_connetions(airport_dicts):
 #establish v2ray client link
 #test google ping
 #test speed
+#test ip
 #build big 2d table of all results, （airport ps, scheme, host, port, tcp ping, google ping, speed mbps）
 #choose optimal relay configs
 #build html and js，save results to json dump
@@ -317,12 +366,15 @@ if __name__ == '__main__':
     build_client_json_configs(airport_dicts)
     #convert to v2ray relay config json files
     build_relay_json_configs(airport_dicts)
+    #establish v2ray client link
+    establish_v2ray_connetions(airport_dicts)
     #test tcp pings
     print("Testing tcp pings...")
     tcp_pings = test_tcp_pings(airport_dicts)
     print("done tcp pings")
-    #establish v2ray client link
-    establish_v2ray_connetions(airport_dicts)
+    #test public ip
+    print("Testing public ip...")
+    public_ips=test_public_ip(airport_dicts)
     #test google pings
     print("Testing google pings...")
     google_pings = test_google_pings(airport_dicts)
@@ -335,12 +387,16 @@ if __name__ == '__main__':
     #build big 2d table of all results, （airport ps, scheme, host, port, tcp ping, google ping, speed mbps）
     for idx, airport in enumerate(airport_dicts):
         airport_res_dicts.append({})
+        airport_res_dicts[-1]["comments"] = airport["comments"]
         airport_res_dicts[-1]["airport"] = airport.copy()
         airport_res_dicts[-1]["tcp_ping"] = tcp_pings[idx]
         airport_res_dicts[-1]["google_ping"] = google_pings[idx]
         airport_res_dicts[-1]["speed_mbps"] = speed_mbps[idx]
+        airport_res_dicts[-1]["ip"] = public_ips[idx]
 
     #save results to json dump, file name is YYYY-MM-DD-HH-MM-SS_v2ray_results.json, path is results/ relative to this script.
+    if not os.path.exists("results"):
+        os.makedirs("results")
     with open(f"results/{time.strftime('%Y-%m-%d-%H-%M-%S')}_v2ray_results.json", "w") as f:
         json.dump(airport_res_dicts, f, indent=2)
        
