@@ -1,0 +1,67 @@
+{
+  "log": {
+    "access": "/var/log/v2ray/access.log",
+    "error": "/var/log/v2ray/error.log",
+    "loglevel": "warning"
+  },
+  "dns": {},
+  "stats": {},
+  "inbounds": [
+    {
+      "port": 60900,
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "cafe1234-5678-4abc-def0-12345badc0de",
+            "alterId": 32
+          }
+        ]
+      },
+      "tag": "in-0",
+      "streamSettings": {
+        "network": "tcp",
+        "security": "none",
+        "tcpSettings": {}
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vmess",
+      "settings": {
+          "vnext": [
+              {
+                  "address": "example.com",
+                  "port": 62015,
+                  "users": [
+                      {
+                          "id": "35e12302-28fe-3aa3-8252-2361a30c4953",
+                          "alterId": 0,
+                          "security": "auto"
+                      }
+                  ]
+              }
+          ]
+      },
+      "streamSettings": {
+          "network": "tcp"
+      }
+  }
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "type": "field",
+        "ip": [
+          "geoip:private"
+        ],
+        "outboundTag": "blocked"
+      }
+    ]
+  },
+  "policy": {},
+  "reverse": {},
+  "transport": {}
+}

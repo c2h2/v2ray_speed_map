@@ -161,3 +161,4 @@ cython_debug/
 #
 config.json
 v2ray/*
+relay_config.json
