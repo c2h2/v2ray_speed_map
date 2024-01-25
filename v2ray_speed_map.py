@@ -14,6 +14,7 @@ import subprocess
 from subprocess import DEVNULL, STDOUT, check_call
 import socks
 import os
+import sys
 
 
 #globals
@@ -22,6 +23,7 @@ save_all_server_configs = True
 create_relay_configs = True
 all_server_configs_dir = "/tmp"
 socks_start_port=1100
+just_build_configs=True
 
 
 def get_sub_links(urls):
@@ -149,14 +151,17 @@ def get_client_config_fn_by_id(id):
 
 def build_client_json_configs(airport_dicts):
     for idx, airport in enumerate(airport_dicts):
-        airport["inbounds"][0]["port"] = socks_start_port + idx
+        l_airport = airport.copy()
+        l_airport["inbounds"][0]["port"] = socks_start_port + idx
         with open(get_client_config_fn_by_id(idx), "w") as f:
-            json.dump(airport, f, indent=2)
+            json.dump(l_airport, f, indent=2)
 
 def build_relay_json_configs(airport_dicts):
+    airport_relay = json.load(open(configs["template_relay"],"r"))
     for idx, airport in enumerate(airport_dicts):
+        airport_relay["outbounds"] = airport["outbounds"].copy()
         with open(get_relay_config_fn_by_id(idx), "w") as f:
-            json.dump(airport, f, indent=2)
+            json.dump(airport_relay, f, indent=2)
 
 def test_http_ping(url, socks_host, socks_port, timeout=6, times=0):
     if times >= 3:
@@ -368,6 +373,9 @@ if __name__ == '__main__':
     build_client_json_configs(airport_dicts)
     #convert to v2ray relay config json files
     build_relay_json_configs(airport_dicts)
+
+    if just_build_configs:
+        sys.exit(0)
     #establish v2ray client link
     establish_v2ray_connetions(airport_dicts)
     #test tcp pings
@@ -405,6 +413,8 @@ if __name__ == '__main__':
 
     #choose optimal relay configs
     
+
+    #export relay b64 sub links
     
     #build html and js
         
