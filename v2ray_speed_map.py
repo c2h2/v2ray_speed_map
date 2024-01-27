@@ -1,20 +1,17 @@
-#download a page
 import requests
 import json
 import base64 
-
-#test pings
 import socket
 import time
-
-#parse trojan
 from urllib.parse import urlparse, unquote
-
 import subprocess
 from subprocess import DEVNULL, STDOUT, check_call
 import socks
 import os
 import sys
+
+#cutom files
+import ascii_table
 
 
 #globals
@@ -23,7 +20,7 @@ save_all_server_configs = True
 create_relay_configs = True
 all_server_configs_dir = "/tmp"
 socks_start_port=1100
-just_build_configs=True
+just_build_configs=False
 
 
 def get_sub_links(urls):
@@ -208,7 +205,7 @@ def build_html_and_js():
     pass
 
 def speedtest_download_file2(socks_host, socks_port):
-    timeout = 20
+    timeout = 12
     url = configs["test_url"]
     socks.set_default_proxy(socks.SOCKS5, socks_host, socks_port)  # Change to your SOCKS proxy settings
     socket.socket = socks.socksocket
@@ -285,7 +282,6 @@ def test_google_pings(airport_dicts):
     for idx, airport in enumerate(airport_dicts):
         socks_host = "localhost"
         socks_port = airport["inbounds"][0]["port"]
-        print(f"Testing {socks_host}:{socks_port} -> google.com")
         res = test_http_ping("http://google.com", socks_host, socks_port)
         print(f"{idx} {airport['comments']} -> google.com = {res} ms")
         google_pings.append(res)
@@ -334,11 +330,22 @@ def establish_v2ray_connetions(airport_dicts):
             cmd = f"v2ray/v2ray run -c {get_client_config_fn_by_id(idx)}"
             print(cmd)
             procs.append(subprocess.Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL))
+            time.sleep(0.1)
     return procs
 
 def kill_v2ray_connetions(procs):
     for proc in procs:
         proc.kill()
+
+def print_ascii_table(list_of_dicts):
+    new_list = []
+    for l in list_of_dicts:
+        new_list.append(l.copy())
+        new_list[-1]["speed_mbps"] = round(new_list[-1]["speed_mbps"], 2)
+        del new_list[-1]["airport"]
+    table = ascii_table.create_ascii_table(new_list)
+    print(table)
+    return table
 
 #this program read sublinks from config.json, it will produce client configs for speed and ping test, and relay configs, it follows:
 #load config
@@ -358,6 +365,7 @@ def kill_v2ray_connetions(procs):
 
 
 if __name__ == '__main__':
+    ts = time.strftime('%Y-%m-%d-%H-%M-%S')
     airport_res_dicts = []
     #load config
     with open("config.json", "r") as f: configs = json.load(f)
@@ -407,7 +415,7 @@ if __name__ == '__main__':
     #save results to json dump, file name is YYYY-MM-DD-HH-MM-SS_v2ray_results.json, path is results/ relative to this script.
     if not os.path.exists("results"):
         os.makedirs("results")
-    with open(f"results/{time.strftime('%Y-%m-%d-%H-%M-%S')}_v2ray_results.json", "w") as f:
+    with open(f"results/{ts}_v2ray_results.json", "w") as f:
         json.dump(airport_res_dicts, f, indent=2)
        
 
@@ -417,5 +425,8 @@ if __name__ == '__main__':
     #export relay b64 sub links
     
     #build html and js
-        
+    table = print_ascii_table(airport_res_dicts)
+    with open(f"results/{ts}_v2ray_results.txt", "w", encoding='utf-8') as f:
+        f.write(table)
+   
     
