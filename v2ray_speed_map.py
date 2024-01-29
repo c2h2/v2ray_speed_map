@@ -157,6 +157,7 @@ def build_relay_json_configs(airport_dicts):
     airport_relay = json.load(open(configs["template_relay"],"r"))
     for idx, airport in enumerate(airport_dicts):
         airport_relay["outbounds"] = airport["outbounds"].copy()
+        airport_dicts[idx]["relay"] = airport_relay
         with open(get_relay_config_fn_by_id(idx), "w") as f:
             json.dump(airport_relay, f, indent=2)
 
@@ -347,6 +348,25 @@ def print_ascii_table(list_of_dicts):
     print(table)
     return table
 
+#this function is not used currently.
+def create_sublinks(airport_dicts):
+    total_output_str = ""
+    vmess_sub_template = json.load(open(configs["template_sublink"],"r"))
+    count = 0
+    for idx, airport in enumerate(airport_dicts):
+        
+        if airport["outbounds"][0]["protocol"] == "vmess":
+            count = count + 1
+            new_relay_aiport_config=vmess_sub_template.copy()
+            new_relay_aiport_config["ps"] = new_relay_aiport_config["ps"] + str(count)
+            new_relay_aiport_config["port"] = int(new_relay_aiport_config["port"])  + idx
+            sublink = base64.b64encode(json.dumps(new_relay_aiport_config).encode()).decode()
+            print(f"{idx} {airport['comments']} -> sublink = {sublink}")
+            total_output_str = total_output_str + "\nvmess://" +  sublink
+    total_output_str_b64 = base64.b64encode(total_output_str.encode()).decode()
+    print(total_output_str_b64) 
+    return total_output_str_b64
+
 #this program read sublinks from config.json, it will produce client configs for speed and ping test, and relay configs, it follows:
 #load config
 #dl sub links
@@ -382,6 +402,8 @@ if __name__ == '__main__':
     #convert to v2ray relay config json files
     build_relay_json_configs(airport_dicts)
 
+    #create_sublinks(airport_dicts)
+    
     if just_build_configs:
         sys.exit(0)
     #establish v2ray client link
@@ -423,6 +445,7 @@ if __name__ == '__main__':
     
 
     #export relay b64 sub links
+    
     
     #build html and js
     table = print_ascii_table(airport_res_dicts)
