@@ -20,7 +20,7 @@ save_all_server_configs = True
 create_relay_configs = True
 all_server_configs_dir = "/tmp"
 socks_start_port=1100
-just_build_configs=False
+just_build_configs=True
 
 
 def get_sub_links(urls):
@@ -86,8 +86,9 @@ def parse_sub_links(contents):
                     #merge vmess_config to airport
                     airport.update(vmess_config)
                 if scheme == 'vless':
-                    vless_config = json.loads(base64.b64decode(node_b64).decode("utf-8"))
-                    airport.update(vless_config)
+                    #vless_config = json.loads(base64.b64decode(node_b64).decode("utf-8"))
+                    pass #process directly
+                    #airport.update(vless_config)
                 if scheme == 'ss' or scheme == 'ssr':
                     ss_config = base64.b64decode(node_b64).decode("utf-8")
                     airport["add"] = ss_config.split("@")[1].split(":")[0]
@@ -113,9 +114,10 @@ def parse_sub_links(contents):
     return airports
 
 def build_config_by_airport(airport):
-    config_template=json.load(open(configs["template_vmess_client"],"r"))
+    vmess_template=json.load(open(configs["template_vmess_client"],"r"))
+    vless_gprc_template = json.load(open(configs["template_vless_grpc_client"],"r"))
     if airport["scheme"] == "vmess":     
-        new_config = config_template.copy()
+        new_config = vmess_template.copy()
         comments = airport["ps"]
         new_config["outbounds"][0]["settings"]["vnext"][0]["address"] = airport["add"]
         new_config["outbounds"][0]["settings"]["vnext"][0]["port"] = int(airport["port"])
@@ -123,21 +125,33 @@ def build_config_by_airport(airport):
         new_config["outbounds"][0]["settings"]["vnext"][0]["users"][0]["alterId"] = int(airport["aid"])
         new_config["comments"] = comments
         return new_config, comments
+    if airport["scheme"] == "vless": #process vless grpc
+        service_str = airport["org_str"].split("://")[1]
+        new_config = vless_gprc_template.copy()
+        id = service_str.split("@")[0]
+        address = service_str.split("@")[1].split(":")[0]
+        port = service_str.split("@")[1].split("?")[0].split(":")[1]
+        comments = service_str.split("#")[0]
+        
+        new_config["outbounds"][0]["settings"]["vnext"][0]["address"] = address
+        new_config["outbounds"][0]["settings"]["vnext"][0]["port"] = int(port)
+        new_config["outbounds"][0]["settings"]["vnext"][0]["users"][0]["id"] = id
+        new_config["outbounds"][0]["streamSettings"]["tlsSettings"]["serverName"] = address
+        new_config["outbounds"][0]["streamSettings"]["grpcSettings"]["serviceName"] = id
+        new_config["comments"] = comments
+        return new_config, comments
     return None, None
 
 def build_dicts_by_airports(airports):
-    
-    for airport in airports:
-        new_config, comment = build_config_by_airport(airport)
-        if new_config != None:
-            airport.update(new_config)
-            airport["comments"] = comment
-
     new_configs = []
     for airport in airports:
         new_config, comment = build_config_by_airport(airport)
-        new_config["comments"] = comment
-        new_configs.append(new_config.copy())
+        try:
+            new_config["comments"] = comment
+            new_configs.append(new_config.copy())
+        except Exception as e:
+            print(e)
+            
     return new_configs
 
 def get_relay_config_fn_by_id(id):
@@ -403,7 +417,6 @@ if __name__ == '__main__':
     build_relay_json_configs(airport_dicts)
 
     #create_sublinks(airport_dicts)
-    
     if just_build_configs:
         sys.exit(0)
     #establish v2ray client link

@@ -5,6 +5,7 @@
     ],
     "test_url": "http://ipv4.download.thinkbroadband.com/100MB.zip",
     "template_vmess_client": "template_vmess_client.json",
-    "template_relay": "template_relay.json".
+    "template_vless_grpc_client": "template_vless_grpc_client.json",
+    "template_relay": "template_relay.json",
     "template_sublink": "template_sublink.json"
   }

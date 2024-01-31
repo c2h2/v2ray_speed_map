@@ -1,0 +1,53 @@
+{
+  "log": {
+    "access": "",
+    "error": "",
+    "loglevel": "info"
+  },
+  "inbounds": [
+    {
+      "port": 1080,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+        "protocol": "vless",
+        "settings": {
+            "vnext": [
+                {
+                    "address": "your_server_ip",
+                    "port": 443,
+                    "users": [
+                        {
+                            "id": "",
+                            "encryption": "none"
+                        }
+                    ]
+                }
+            ]
+        },
+        "mux": {
+          "enabled": false,
+          "concurrency": 8
+        },
+        "streamSettings": {
+            "network": "gun",
+            "security": "tls",
+            "tlsSettings": {
+                "serverName": "your_domain",
+                "allowInsecure": false,
+                "alpn": [
+                    "h2"
+                ]
+            },
+            "grpcSettings": {
+                "serviceName": "GunService"
+            }
+        }
+    }
+  ]
+}
