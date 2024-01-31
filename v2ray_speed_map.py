@@ -20,8 +20,9 @@ save_all_server_configs = True
 create_relay_configs = True
 all_server_configs_dir = "/tmp"
 socks_start_port=1100
-just_build_configs=True
-
+just_build_configs=False
+xray_bin="/opt/xray/xray"
+v2ray_bin="/opt/v2ray/v2ray"
 
 def get_sub_links(urls):
     contents = []
@@ -61,15 +62,15 @@ def parse_trojan(trojan_url):
 def parse_sub_links(contents):
     airports=[]
     for b64 in contents:
+        
         #decode base64
         nodes_text = base64.b64decode(str.encode(b64) + b'=' * (-len(b64) % 4))
         nodes = nodes_text.decode().strip().split('\n')
-        if len(nodes) < 10 or nodes == None:
-            continue
         for node in nodes:
             if len(node) < 10 or node == None:
                 continue
             try:
+                
                 scheme = node.split('://')[0]
                 node_b64 = node.split('://')[1]
                 
@@ -86,9 +87,7 @@ def parse_sub_links(contents):
                     #merge vmess_config to airport
                     airport.update(vmess_config)
                 if scheme == 'vless':
-                    #vless_config = json.loads(base64.b64decode(node_b64).decode("utf-8"))
-                    pass #process directly
-                    #airport.update(vless_config)
+                    pass #update later in functions.
                 if scheme == 'ss' or scheme == 'ssr':
                     ss_config = base64.b64decode(node_b64).decode("utf-8")
                     airport["add"] = ss_config.split("@")[1].split(":")[0]
@@ -131,7 +130,7 @@ def build_config_by_airport(airport):
         id = service_str.split("@")[0]
         address = service_str.split("@")[1].split(":")[0]
         port = service_str.split("@")[1].split("?")[0].split(":")[1]
-        comments = service_str.split("#")[0]
+        comments = service_str.split("#")[1]
         
         new_config["outbounds"][0]["settings"]["vnext"][0]["address"] = address
         new_config["outbounds"][0]["settings"]["vnext"][0]["port"] = int(port)
@@ -160,14 +159,13 @@ def get_relay_config_fn_by_id(id):
 def get_client_config_fn_by_id(id):
     return f"{all_server_configs_dir}/v2ray_config_{id}.json"
 
-def build_client_json_configs(airport_dicts):
+def build_all_json_configs(airport_dicts):
     for idx, airport in enumerate(airport_dicts):
         l_airport = airport.copy()
         l_airport["inbounds"][0]["port"] = socks_start_port + idx
         with open(get_client_config_fn_by_id(idx), "w") as f:
             json.dump(l_airport, f, indent=2)
 
-def build_relay_json_configs(airport_dicts):
     airport_relay = json.load(open(configs["template_relay"],"r"))
     for idx, airport in enumerate(airport_dicts):
         airport_relay["outbounds"] = airport["outbounds"].copy()
@@ -298,7 +296,7 @@ def test_google_pings(airport_dicts):
         socks_host = "localhost"
         socks_port = airport["inbounds"][0]["port"]
         res = test_http_ping("http://google.com", socks_host, socks_port)
-        print(f"{idx} {airport['comments']} -> google.com = {res} ms")
+        print(f"TESTING：{idx} {airport['comments']} with socks5h://{socks_host}:{socks_port}-> google.com = {res} ms")
         google_pings.append(res)
     return google_pings
 
@@ -342,7 +340,12 @@ def establish_v2ray_connetions(airport_dicts):
     procs=[]
     for idx, airport in enumerate(airport_dicts):
         if airport["outbounds"][0]["protocol"] == "vmess":
-            cmd = f"v2ray/v2ray run -c {get_client_config_fn_by_id(idx)}"
+            cmd = f"{v2ray_bin} run -c {get_client_config_fn_by_id(idx)}"
+            print(cmd)
+            procs.append(subprocess.Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL))
+            time.sleep(0.1)
+        if airport["outbounds"][0]["protocol"] == "vless":
+            cmd = f"{xray_bin} run -c {get_client_config_fn_by_id(idx)}"
             print(cmd)
             procs.append(subprocess.Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL))
             time.sleep(0.1)
@@ -404,18 +407,15 @@ if __name__ == '__main__':
     #load config
     with open("config.json", "r") as f: configs = json.load(f)
     #dl sub links   
-    print("Downloading sub links...", end="") 
+    print("Downloading sub links...") 
     contents = get_sub_links(configs["sub_urls"]) #become whole base64
-    print("done")
+    print("done DL sub links")
     #parse sub links
     airports = parse_sub_links(contents) #become json of each airport, each "airports” is a jsons of a sub link.
     #convert links b64 to dict
     airport_dicts = build_dicts_by_airports(airports)
-    #convert to v2ray client config json files
-    build_client_json_configs(airport_dicts)
-    #convert to v2ray relay config json files
-    build_relay_json_configs(airport_dicts)
-
+    #convert to v2ray client config json files #convert to v2ray relay config json files
+    build_all_json_configs(airport_dicts) 
     #create_sublinks(airport_dicts)
     if just_build_configs:
         sys.exit(0)
@@ -465,4 +465,3 @@ if __name__ == '__main__':
     with open(f"results/{ts}_v2ray_results.txt", "w", encoding='utf-8') as f:
         f.write(table)
    
-    

@@ -4,6 +4,11 @@
     "error": "",
     "loglevel": "info"
   },
+  "dns": {
+    "network": "tcp",
+    "address": "1.1.1.1",
+    "port": 53
+  },
   "inbounds": [
     {
       "port": 1080,
@@ -15,39 +20,41 @@
   ],
   "outbounds": [
     {
-        "protocol": "vless",
-        "settings": {
-            "vnext": [
-                {
-                    "address": "your_server_ip",
-                    "port": 443,
-                    "users": [
-                        {
-                            "id": "",
-                            "encryption": "none"
-                        }
-                    ]
-                }
-            ]
+      "settings": {
+        "vnext": [
+          {
+            "port": 443,
+            "users": [
+              {
+                "encryption": "none",
+                "id": "12340f1a-a08b-4a12-8add-8a1f87da76cd",
+                "level": 0
+              }
+            ],
+            "address": "abc.com"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "tlsSettings": {
+          "allowInsecure": true
         },
-        "mux": {
-          "enabled": false,
-          "concurrency": 8
+        "grpcSettings": {
+          "serviceName": "12340f1a-a08b-4a12-8add-8a1f87da76cd",
+          "initial_windows_size": 0
         },
-        "streamSettings": {
-            "network": "gun",
-            "security": "tls",
-            "tlsSettings": {
-                "serverName": "your_domain",
-                "allowInsecure": false,
-                "alpn": [
-                    "h2"
-                ]
-            },
-            "grpcSettings": {
-                "serviceName": "GunService"
-            }
-        }
+        "sockopt": {
+          "mark": 255
+        },
+        "security": "tls"
+      },
+      "mux": {
+        "enabled": true,
+        "concurrency": 8
+      },
+      "protocol": "vless",
+      "tag": "4dc3a594caa646749a71844a96649ac5"
     }
   ]
 }
