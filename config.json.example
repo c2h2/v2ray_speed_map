@@ -7,5 +7,6 @@
     "template_vmess_client": "template_vmess_client.json",
     "template_vless_grpc_client": "template_vless_grpc_client.json",
     "template_relay": "template_relay.json",
+    "template_dual_jump_relay": "template_dual_jump_relay.json",
     "template_sublink": "template_sublink.json"
   }

@@ -1,0 +1,1 @@
+../passwall_switcher/relay_switcher.py
