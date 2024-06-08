@@ -177,23 +177,16 @@ def build_all_tannel_json_configs(airport_dicts):
         with open(fn, "w") as f:
             json.dump(airport_relay, f, indent=2)
 
-def build_all_json_dual_jump_configs(airport_dicts):
+    airport_dual_relay = json.load(open(configs["template_dual_jump_relay"],"r"))
     for idx, airport in enumerate(airport_dicts):
-        l_airport = airport.copy()
-        l_airport["inbounds"][0]["port"] = socks_start_port + idx
-        with open(get_client_config_fn_by_id(idx), "w") as f:
-            json.dump(l_airport, f, indent=2)
-
-    airport_relay = json.load(open(configs["template_dual_jump_relay"],"r"))
-    for idx, airport in enumerate(airport_dicts):
-        airport_relay["outbounds"][1]["settings"]["vnext"][0]["address"] = airport["outbounds"][0]["settings"]["vnext"][0]["address"]
-        airport_relay["outbounds"][1]["settings"]["vnext"][0]["port"] = airport["outbounds"][0]["settings"]["vnext"][0]["port"]
-        airport_relay["outbounds"][1]["settings"]["vnext"][0]["users"][0]["id"]= airport["outbounds"][0]["settings"]["vnext"][0]["users"][0]["id"]
-        airport_dicts[idx]["relay"] = airport_relay
+        airport_dual_relay["outbounds"][1]["settings"]["vnext"][0]["address"] = airport["outbounds"][0]["settings"]["vnext"][0]["address"]
+        airport_dual_relay["outbounds"][1]["settings"]["vnext"][0]["port"] = airport["outbounds"][0]["settings"]["vnext"][0]["port"]
+        airport_dual_relay["outbounds"][1]["settings"]["vnext"][0]["users"][0]["id"]= airport["outbounds"][0]["settings"]["vnext"][0]["users"][0]["id"]
+        airport_dicts[idx]["relay"] = airport_dual_relay
         fn = get_dual_jump_relay_config_fn_by_id(idx)
         print(fn)
         with open(fn, "w") as f:
-            json.dump(airport_relay, f, indent=2)
+            json.dump(airport_dual_relay, f, indent=2)
 
 def test_http_ping(url, socks_host, socks_port, timeout=6, times=0):
     if times >= 3:
@@ -359,15 +352,16 @@ def usage():
     print("example configs need to be copid to jsons and in the same directory as this script.")
 
 def establish_v2ray_connetions(airport_dicts):
+    global v2ray_bin, xray_bin
     procs=[]
     for idx, airport in enumerate(airport_dicts):
         if airport["outbounds"][0]["protocol"] == "vmess":
-            cmd = f"{v2ray_bin} run -c {get_dual_jump_relay_config_fn_by_id(idx)}" #using dual jump
+            cmd = f"{v2ray_bin} run -c {get_client_config_fn_by_id(idx)}" #using dual jump
             print(cmd)
             procs.append(subprocess.Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL))
             time.sleep(0.1)
         if airport["outbounds"][0]["protocol"] == "vless":
-            cmd = f"{xray_bin} run -c {get_tannel_relay_config_fn_by_id(idx)}" #using single jump
+            cmd = f"{xray_bin} run -c {get_client_config_fn_by_id(idx)}" #using single jump
             print(cmd)
             procs.append(subprocess.Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL))
             time.sleep(0.1)
@@ -439,7 +433,7 @@ if __name__ == '__main__':
     #convert to v2ray client config json files #convert to v2ray relay config json files
     build_all_tannel_json_configs(airport_dicts) 
     
-    build_all_json_dual_jump_configs(airport_dicts)
+    #build_all_json_dual_jump_configs(airport_dicts)
     
     #create_sublinks(airport_dicts)
     if just_build_configs:
@@ -489,4 +483,3 @@ if __name__ == '__main__':
     table = print_ascii_table(airport_res_dicts)
     with open(f"results/{ts}_v2ray_results.txt", "w", encoding='utf-8') as f:
         f.write(table)
-   
