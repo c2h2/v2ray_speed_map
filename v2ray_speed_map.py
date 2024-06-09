@@ -9,10 +9,14 @@ from subprocess import DEVNULL, STDOUT, check_call
 import socks
 import os
 import sys
+import redis
 
 #cutom files
 import ascii_table
 
+this_redis = redis.Redis(host='localhost', port=6379, db=0)
+#TEST_HTTP_ADDR = "http://www.google.com"
+TEST_HTTP_ADDR = "http://jfk.sh1.xyz"
 
 #globals
 configs=[]
@@ -101,12 +105,10 @@ def parse_sub_links(contents):
                     airport["path"] = ""
                     airport["tls"] = ""
                     airport["sni"] = ""
-
-                
                     
                 airport["org_str"] = node
-                
-                airports.append(airport)
+                if len(airport["ps"]) < 50:
+                    airports.append(airport)
             except Exception as e:
                 print(node)
                 print(e)
@@ -232,12 +234,34 @@ def build_html_and_js():
     #do this later.
     pass
 
+
+
+def speedtest_download_file3(socks_host, socks_port, timeout=10):
+    url = configs["test_url"]
+    socks.set_default_proxy(socks.SOCKS5, socks_host, socks_port)
+    socket.socket = socks.socksocket
+    print(url, socks_host, socks_port)
+    start_time = time.time()
+    response = requests.get(url, stream=True)
+    total_size = int(response.headers.get('content-length', 0))
+    block_size = 1024
+    wrote = 0
+    with open("downloaded_file", 'wb') as f:
+        for data in tqdm(response.iter_content(block_size), total=total_size // block_size, unit='KB', unit_scale=True):
+            f.write(data)
+            wrote += len(data)
+            if time.time() - start_time > timeout:
+                break
+    
+    elapsed_time = time.time() - start_time
+    download_speed = wrote / elapsed_time
+    return download_speed
+
 def speedtest_download_file2(socks_host, socks_port):
     timeout = 12
     url = configs["test_url"]
     socks.set_default_proxy(socks.SOCKS5, socks_host, socks_port)  # Change to your SOCKS proxy settings
     socket.socket = socks.socksocket
-
     start_time = time.time()
     bytes_downloaded = 0
     try:
@@ -299,19 +323,34 @@ def test_tcp_pings(airport_dicts):
         ping = test_tcp_ping(airport)
         tcp_pings.append(ping)
         try:
-            print(f"{idx} {airport_dicts[idx]['comments']} {ping} ms.")
+            print(f"TCP: {idx} {airport_dicts[idx]['comments']} {ping} ms.")
         except: #not an airport
             pass
     
     return tcp_pings
+
+def killall_v2ray():
+    processes = subprocess.check_output(["pgrep", "v2ray"]).decode().split()
+    print("killing, ", processes)
+    # Kill each process
+    if len(processes) == 0:
+        print("No v2ray process found")
+        return
+    
+    for pid in processes:
+        os.system(f"kill {pid}")
 
 def test_google_pings(airport_dicts):
     google_pings = []
     for idx, airport in enumerate(airport_dicts):
         socks_host = "localhost"
         socks_port = airport["inbounds"][0]["port"]
-        res = test_http_ping("http://google.com", socks_host, socks_port)
-        print(f"TESTING：{idx} {airport['comments']} with socks5h://{socks_host}:{socks_port}-> google.com = {res} ms")
+        pings = []
+        for i in range(3):
+            pings.append(test_http_ping(TEST_HTTP_ADDR, socks_host, socks_port))
+        res = min(pings)
+
+        print(f"GOOGLE: {idx} {airport['comments']} with socks5h://{socks_host}:{socks_port} -> {TEST_HTTP_ADDR} = {res} ms")
         google_pings.append(res)
     return google_pings
 
@@ -325,7 +364,7 @@ def test_speeds(airport_dicts):
         speeds.append(res)
         scheme = airport["outbounds"][0]["protocol"]
         address = airport["outbounds"][0]["settings"]["vnext"][0]["address"]
-        print(f"{idx} {airport['comments']} -> {scheme} {address} = {res} Mbps")
+        print(f"DL: {idx} {airport['comments']} -> {scheme} {address} = {res} Mbps")
     return speeds
 
 def create_relay_dict(airport_config, relay_template):#only vmess for now.
@@ -341,7 +380,7 @@ def test_public_ip(airport_dicts):
         proxies = {'http': f"socks5h://{socks_host}:{socks_port}", 'https': f"socks5h://{socks_host}:{socks_port}"}
         try:
             res = requests.get("http://ifconfig.me", proxies=proxies, timeout=5).text
-            print(f"{idx} {airport['comments']} -> IP = {res}")
+            print(f"IP: {idx} {airport['comments']} -> IP = {res}")
         except:
             res = "FAILED"
         ips.append(res)
@@ -433,11 +472,11 @@ if __name__ == '__main__':
     #convert to v2ray client config json files #convert to v2ray relay config json files
     build_all_tannel_json_configs(airport_dicts) 
     
-    #build_all_json_dual_jump_configs(airport_dicts)
-    
     #create_sublinks(airport_dicts)
     if just_build_configs:
         sys.exit(0)
+    #killall system v2ray connections
+    killall_v2ray()
     #establish v2ray client link
     establish_v2ray_connetions(airport_dicts)
     #test tcp pings
@@ -452,8 +491,12 @@ if __name__ == '__main__':
     google_pings = test_google_pings(airport_dicts)
     print("done google pings")
     #test speeds
-    print("Testing dl speeds...")
-    speed_mbps = test_speeds(airport_dicts)
+    #print("Testing dl speeds...")
+    do_test_speed = False
+    if do_test_speed:
+        speed_mbps = test_speeds(airport_dicts) 
+    else:
+        speed_mbps = [0] * len(google_pings)
     print("done")
 
     #build big 2d table of all results, （airport ps, scheme, host, port, tcp ping, google ping, speed mbps）
@@ -465,6 +508,9 @@ if __name__ == '__main__':
         airport_res_dicts[-1]["google_ping"] = google_pings[idx]
         airport_res_dicts[-1]["speed_mbps"] = speed_mbps[idx]
         airport_res_dicts[-1]["ip"] = public_ips[idx]
+
+    #update redis
+    this_redis.set("v2ray_speed_map", json.dumps(airport_res_dicts))
 
     #save results to json dump, file name is YYYY-MM-DD-HH-MM-SS_v2ray_results.json, path is results/ relative to this script.
     if not os.path.exists("results"):
