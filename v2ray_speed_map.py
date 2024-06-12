@@ -10,6 +10,7 @@ import socks
 import os
 import sys
 import redis
+import psutil
 
 #cutom files
 import ascii_table
@@ -329,6 +330,22 @@ def test_tcp_pings(airport_dicts):
     
     return tcp_pings
 
+def kill_v2ray_processes_with_args_containing(substring):
+    for proc in psutil.process_iter(['pid', 'cmdline']):
+        try:
+            # Combine the command-line arguments into a single string and check if the substring is present
+            if proc.info['cmdline']== None or len(proc.info['cmdline']) == 0:
+                continue
+            cmdline = ' '.join(proc.info['cmdline'])
+            if "v2ray" in cmdline.lower():
+                if substring.lower() in cmdline.lower() and "while" not in cmdline.lower():
+                    print(f"Terminating process {proc.info['pid']} - {cmdline}")
+                    proc.terminate()  # Terminate the process
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+
+    print(f"All processes containing '{substring}' in their command-line arguments have been terminated.")
+
 def killall_v2ray():
     processes = subprocess.check_output(["pgrep", "v2ray"]).decode().split()
     print("killing, ", processes)
@@ -476,7 +493,8 @@ if __name__ == '__main__':
     if just_build_configs:
         sys.exit(0)
     #killall system v2ray connections
-    killall_v2ray()
+    #killall_v2ray()
+    kill_v2ray_processes_with_args_containing("tmp")
     #establish v2ray client link
     establish_v2ray_connetions(airport_dicts)
     #test tcp pings
