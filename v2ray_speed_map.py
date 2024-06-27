@@ -472,9 +472,32 @@ def create_sublinks(airport_dicts):
 #choose optimal relay configs
 #build html and js，save results to json dump
 
+def post_table_to_server(table, url):
+    
+    hostname =  socket.gethostname()
+    ipv4 = socket.gethostbyname(hostname)
+    #ipv6 = socket.getaddrinfo(hostname, None, socket.AF_INET6)[0][4][0]
+
+    data = {
+        "result": hostname + " Created at:" + time.strftime('%Y-%m-%d %H:%M:%S') + "\n" + table,
+        "hostname": hostname,
+        "hostmachine_ipv4": ipv4,
+        "hostmachine_ipv6": ipv6
+    }
+
+    headers = {
+        'Content-Type': 'application/json'
+    }
+
+    response = requests.post(url, data=json.dumps(data), headers=headers)
+
+    print("Status Code:", response.status_code)
+    print("Response Text:", response.text)
+
 
 if __name__ == '__main__':
     ts = time.strftime('%Y-%m-%d-%H-%M-%S')
+    ipv6 = subprocess.check_output('ip -6 a | grep inet | grep global | grep 128 | head -n 1 | cut -d" " -f 6', shell=True).decode().strip()
     airport_res_dicts = []
     #load config
     with open("config.json", "r") as f: configs = json.load(f)
@@ -547,3 +570,5 @@ if __name__ == '__main__':
     table = print_ascii_table(airport_res_dicts)
     with open(f"results/{ts}_v2ray_results.txt", "w", encoding='utf-8') as f:
         f.write(table)
+
+    post_table_to_server(table, configs["post_server_url"])
