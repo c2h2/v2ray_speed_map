@@ -1,2 +1,4 @@
 requests
 pysocks
+redis
+psutil
