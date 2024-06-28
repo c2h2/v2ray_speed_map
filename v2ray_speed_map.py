@@ -18,9 +18,12 @@ import ascii_table
 this_redis = redis.Redis(host='localhost', port=6379, db=0)
 #TEST_HTTP_ADDR = "http://www.google.com"
 TEST_HTTP_ADDR = "http://jfk.sh1.xyz"
+#load config
+configs = []
+with open("config.json", "r") as f: 
+    configs = json.load(f)
 
 #globals
-configs=[]
 save_all_server_configs = True
 create_relay_configs = True
 all_server_configs_dir = "/tmp"
@@ -499,8 +502,7 @@ if __name__ == '__main__':
     ts = time.strftime('%Y-%m-%d-%H-%M-%S')
     ipv6 = subprocess.check_output('ip -6 a | grep inet | grep global | grep 128 | head -n 1 | cut -d" " -f 6', shell=True).decode().strip()
     airport_res_dicts = []
-    #load config
-    with open("config.json", "r") as f: configs = json.load(f)
+    
     #dl sub links   
     print("Downloading sub links...") 
     contents = get_sub_links(configs["sub_urls"]) #become whole base64
