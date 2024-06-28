@@ -70,9 +70,11 @@ def parse_trojan(trojan_url):
 def parse_sub_links(contents):
     airports=[]
     for b64 in contents:
-        
         #decode base64
+        b64 = b64.strip()
+        print(b64)
         nodes_text = base64.b64decode(str.encode(b64) + b'=' * (-len(b64) % 4))
+        
         nodes = nodes_text.decode().strip().split('\n')
         for node in nodes:
             if len(node) < 10 or node == None:
