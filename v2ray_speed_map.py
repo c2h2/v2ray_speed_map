@@ -207,32 +207,28 @@ def test_http_ping(url, socks_host, socks_port, timeout=6, times=0):
     except Exception as e:
         return test_http_ping(url, socks_host, socks_port, timeout=timeout, times=times+1)
 
+
+def do_test_tcp_ping(host, port, timeout=5):
+    start_time = time.time()
+    sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM) #presumably 
+    sock.settimeout(timeout)
+    try:
+        sock.connect((host,port))
+    except:
+        return 9999
+
+    sock.close()
+    end_time = time.time()
+    ping_time_ms = (end_time - start_time) * 1000  # Convert to milliseconds
+    return round(ping_time_ms,2)
+
 def test_tcp_ping(airport, timeout=5):
     try:
         host = airport["outbounds"][0]["settings"]["vnext"][0]["address"]
         port = int(airport["outbounds"][0]["settings"]["vnext"][0]["port"])
     except:
         return -2
-    dummy_message = "hello"
-
-    try:
-        # Create a socket object
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(timeout)
-            s.connect((host, port))
-
-            start_time = time.time()
-            s.sendall(dummy_message.encode())
-
-            response = s.recv(1024)
-            end_time = time.time()
-            
-            duration_ms = (end_time - start_time) * 1000 # Calculate round-trip time
-            return round(duration_ms, 1)  # Return duration in ms, rounded to 1 decimal place
-    except socket.timeout:
-        return 9999
-    except Exception as e:
-        return 9999
+    return do_test_tcp_ping(host, port, timeout)
     
 def build_html_and_js():
     #do this later.
