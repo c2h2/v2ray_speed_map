@@ -72,9 +72,7 @@ def parse_sub_links(contents):
     for b64 in contents:
         #decode base64
         b64 = b64.strip()
-        print(b64)
         nodes_text = base64.b64decode(str.encode(b64) + b'=' * (-len(b64) % 4))
-        
         nodes = nodes_text.decode().strip().split('\n')
         for node in nodes:
             if len(node) < 10 or node == None:
@@ -418,7 +416,12 @@ def establish_v2ray_connetions(airport_dicts):
     for idx, airport in enumerate(airport_dicts):
         if airport["outbounds"][0]["protocol"] == "vmess":
             cmd = f"{v2ray_bin} run -c {get_client_config_fn_by_id(idx)}" #using dual jump
-            print(cmd)
+            #test file exists?
+            if not os.path.exists(get_client_config_fn_by_id(idx)):
+                print(f"file {get_client_config_fn_by_id(idx)} does not exist, skipping.")
+                continue
+            else:
+                print(cmd)
             procs.append(subprocess.Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL))
             time.sleep(0.1)
         if airport["outbounds"][0]["protocol"] == "vless":
