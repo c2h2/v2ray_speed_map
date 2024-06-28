@@ -67,21 +67,23 @@ def parse_trojan(trojan_url):
 
     return parsed_info
 
+def b64_force_decode(b64):
+    b64 = b64.strip()
+    res = base64.b64decode(str.encode(b64) + b'=' * (-len(b64) % 4))
+    return res
+
 def parse_sub_links(contents):
     airports=[]
     for b64 in contents:
         #decode base64
-        b64 = b64.strip()
-        nodes_text = base64.b64decode(str.encode(b64) + b'=' * (-len(b64) % 4))
+        nodes_text = b64_force_decode(b64)
         nodes = nodes_text.decode().strip().split('\n')
         for node in nodes:
             if len(node) < 10 or node == None:
                 continue
             try:
-                
                 scheme = node.split('://')[0]
                 node_b64 = node.split('://')[1]
-                
                 airport={}
                 airport["scheme"] = scheme
                 if scheme == 'trojan':
@@ -90,8 +92,8 @@ def parse_sub_links(contents):
                     airport["port"] = trojan_config["port"]
                     airport["ps"] = trojan_config["description"]
                     airport["id"] = trojan_config["token"]
-                if scheme == 'vmess':
-                    vmess_config = json.loads(base64.b64decode(node_b64).decode("utf-8"))
+                if scheme == 'vmess':     
+                    vmess_config = json.loads(b64_force_decode(node_b64).decode("utf-8"))
                     #merge vmess_config to airport
                     airport.update(vmess_config)
                 if scheme == 'vless':
@@ -159,6 +161,20 @@ def build_dicts_by_airports(airports):
             
     return new_configs
 
+def airports_to_dicts(airports):
+    new_configs = []
+    socks_start_port = 2080
+    for idx, airport in enumerate(airports):
+        new_config, comment = build_config_by_airport(airport)
+        try:
+            new_config["comments"] = comment 
+            new_config["inbounds"][0]["port"] = socks_start_port + idx
+            new_configs.append(new_config.copy())
+        except Exception as e:
+            print(e)
+            
+    return new_configs
+
 def get_tannel_relay_config_fn_by_id(id):
     return f"{all_server_configs_dir}/v2ray_relay_tannel_config_{id}.json"
 
@@ -194,7 +210,7 @@ def build_all_tannel_json_configs(airport_dicts):
         with open(fn, "w") as f:
             json.dump(airport_dual_relay, f, indent=2)
 
-def test_http_ping(url, socks_host, socks_port, timeout=6, times=0):
+def test_http_ping(url, socks_host, socks_port, timeout=5, times=0):
     if times >= 3:
         return 9999
     try:
@@ -396,9 +412,9 @@ def test_public_ip(airport_dicts):
         proxies = {'http': f"socks5h://{socks_host}:{socks_port}", 'https': f"socks5h://{socks_host}:{socks_port}"}
         try:
             res = requests.get("http://ifconfig.me", proxies=proxies, timeout=5).text
-            print(f"IP: {idx} {airport['comments']} -> IP = {res}")
-        except:
+        except Exception as e:     
             res = "FAILED"
+        print(f"IP: {idx} {airport['comments']} -> IP = {res}")
         ips.append(res)
     return ips
 

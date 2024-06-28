@@ -16,7 +16,7 @@ def get_v2ray_ping(airport_url):
 
 def write_airports_to_file(airport_dicts, temp_files_prefix):
     for i, airport_dict in enumerate(airport_dicts):
-        with open(temp_files_prefix + str(i), 'w') as f:
+        with open(temp_files_prefix + str(i) +".json", 'w') as f:
             f.write(json.dumps(airport_dict))
 
 
@@ -29,11 +29,10 @@ if __name__ == "__main__":
     airport_url = sys.argv[1]
 
     contents = get_sub_links([airport_url])
-    airports = parse_sub_links(contents) 
-    #print(airports)
-    airport_dicts = build_dicts_by_airports(airports)
 
-    print("Airports: ", airport_dicts)
+    airports = parse_sub_links(contents) 
+    print(airports)
+    airport_dicts = airports_to_dicts(airports)
 
     kill_v2ray_processes_with_args_containing("v2ray_config_")
 
