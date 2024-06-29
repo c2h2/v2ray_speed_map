@@ -32,10 +32,10 @@ if __name__ == "__main__":
     if len(sys.argv) == 1:
         print("Please enter the airport url")
         sys.exit()
-    
-    airport_url = sys.argv[1]
 
-    contents = get_sub_links([airport_url])
+    airport_urls = sys.argv[1:]
+
+    contents = get_sub_links(airport_urls)
 
     airports = parse_sub_links(contents) 
     print(airports)
