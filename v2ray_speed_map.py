@@ -236,7 +236,7 @@ def do_test_tcp_ping(host, port, timeout=5):
     sock.close()
     end_time = time.time()
     ping_time_ms = (end_time - start_time) * 1000  # Convert to milliseconds
-    return round(ping_time_ms,2)
+    return round(ping_time_ms)
 
 def test_tcp_ping(airport, timeout=5):
     try:
