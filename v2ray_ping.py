@@ -72,7 +72,8 @@ if __name__ == "__main__":
     results = []
     for i, airport_names in enumerate(airport_names):
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") 
-        results.append({"initiator": hostname,"data_type":"remote_test", "name": airport_names, "tcp_ping": tcp_pings[i], "google_ping": google_pings[i]-tcp_pings[i], "public_ip": public_ips[i], "airport_config": airport_dicts[i] ,"created_at": ts})
+        airport_config_b64 = base64.b64encode(json.dumps(airport_dicts[i]).encode('utf-8')).decode('utf-8')
+        results.append({"initiator": hostname,"data_type":"remote_test", "name": airport_names, "tcp_ping": tcp_pings[i], "google_ping": google_pings[i]-tcp_pings[i], "public_ip": public_ips[i], "airport_config_b64": airport_config_b64 ,"created_at": ts})
     results.append({"initiator": hostname,"data_type":"remote_test", "name": "direct", "tcp_ping": 0, "google_ping": direct_ping, "public_ip": direct_ip,"airport_config":"{}", "created_at": ts})
     
     print(results)
