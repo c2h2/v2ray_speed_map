@@ -225,18 +225,21 @@ def test_http_ping(url, socks_host, socks_port, timeout=5, times=0):
 
 
 def do_test_tcp_ping(host, port, timeout=5):
-    start_time = time.time()
-    sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM) #presumably 
-    sock.settimeout(timeout)
-    try:
-        sock.connect((host,port))
-    except:
-        return 9999
-
-    sock.close()
-    end_time = time.time()
-    ping_time_ms = (end_time - start_time) * 1000  # Convert to milliseconds
-    return round(ping_time_ms)
+    tcp_pings = []
+    for i in range(3):
+        start_time = time.time()
+        sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM) #presumably 
+        sock.settimeout(timeout)
+        try:
+            sock.connect((host,port))
+            sock.close()
+            end_time = time.time()
+            ping_time_ms = (end_time - start_time) * 1000  # Convert to milliseconds
+        except:
+            ping_time_ms = 9999
+        tcp_pings.append(ping_time_ms)
+    
+    return round(min(tcp_pings))
 
 def test_tcp_ping(airport, timeout=5):
     try:
