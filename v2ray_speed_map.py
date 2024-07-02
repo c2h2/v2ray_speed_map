@@ -11,13 +11,16 @@ import os
 import sys
 import redis
 import psutil
+import logging
 
 #cutom files
 import ascii_table
 
+# Configure logging to use stderr
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[logging.StreamHandler(sys.stderr)])
+
 this_redis = redis.Redis(host='localhost', port=6379, db=0)
-#TEST_HTTP_ADDR = "http://www.google.com"
-TEST_HTTP_ADDR = "http://jfk.sh1.xyz"
+TEST_HTTP_ADDR = "http://www.google.com"
 #load config
 configs = []
 with open("config.json", "r") as f: 
@@ -116,8 +119,8 @@ def parse_sub_links(contents):
                 if len(airport["ps"]) < 50:
                     airports.append(airport)
             except Exception as e:
-                print(node)
-                print(e)
+                logging.info(node)
+                logging.info(e)
     return airports
 
 def build_config_by_airport(airport):
@@ -157,7 +160,7 @@ def build_dicts_by_airports(airports):
             new_config["comments"] = comment
             new_configs.append(new_config.copy())
         except Exception as e:
-            print(e)
+            logging.info(e)
             
     return new_configs
 
@@ -171,7 +174,7 @@ def airports_to_dicts(airports):
             new_config["inbounds"][0]["port"] = socks_start_port + idx
             new_configs.append(new_config.copy())
         except Exception as e:
-            print(e)
+            logging.info(e)
             
     return new_configs
 
@@ -206,7 +209,7 @@ def build_all_tannel_json_configs(airport_dicts):
         airport_dual_relay["outbounds"][1]["settings"]["vnext"][0]["users"][0]["id"]= airport["outbounds"][0]["settings"]["vnext"][0]["users"][0]["id"]
         airport_dicts[idx]["relay"] = airport_dual_relay
         fn = get_dual_jump_relay_config_fn_by_id(idx)
-        print(fn)
+        logging.info(fn)
         with open(fn, "w") as f:
             json.dump(airport_dual_relay, f, indent=2)
 
@@ -259,7 +262,7 @@ def speedtest_download_file3(socks_host, socks_port, timeout=10):
     url = configs["test_url"]
     socks.set_default_proxy(socks.SOCKS5, socks_host, socks_port)
     socket.socket = socks.socksocket
-    print(url, socks_host, socks_port)
+    logging.info(url, socks_host, socks_port)
     start_time = time.time()
     response = requests.get(url, stream=True)
     total_size = int(response.headers.get('content-length', 0))
@@ -305,7 +308,7 @@ def speedtest_download_file2(socks_host, socks_port):
         speed_mbps = speed_kbps / 1024
         return round(speed_mbps*8,2)
     except requests.RequestException as e:
-        print(f"Error during request: {e}")
+        logging.info(f"Error during request: {e}")
         return -1
 
 def speedtest_download_file(socks_host, socks_port):
@@ -318,7 +321,7 @@ def speedtest_download_file(socks_host, socks_port):
     total_length = response.headers.get('content-length')
 
     if total_length is None:  # no content length header
-        print("Couldn't retrieve the file")
+        logging.info("Couldn't retrieve the file")
     else:
         try:
             total_length = int(total_length)
@@ -342,7 +345,7 @@ def test_tcp_pings(airport_dicts):
         ping = test_tcp_ping(airport)
         tcp_pings.append(ping)
         try:
-            print(f"TCP: {idx} {airport_dicts[idx]['comments']} {ping} ms.")
+            logging.info(f"TCP: {idx} {airport_dicts[idx]['comments']} {ping} ms.")
         except: #not an airport
             pass
     
@@ -357,19 +360,19 @@ def kill_v2ray_processes_with_args_containing(substring):
             cmdline = ' '.join(proc.info['cmdline'])
             if "v2ray" in cmdline.lower():
                 if substring.lower() in cmdline.lower() and "while" not in cmdline.lower():
-                    print(f"Terminating process {proc.info['pid']} - {cmdline}")
+                    logging.info(f"Terminating process {proc.info['pid']} - {cmdline}")
                     proc.terminate()  # Terminate the process
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
 
-    print(f"All processes containing '{substring}' in their command-line arguments have been terminated.")
+    logging.info(f"All processes containing '{substring}' in their command-line arguments have been terminated.")
 
 def killall_v2ray():
     processes = subprocess.check_output(["pgrep", "v2ray"]).decode().split()
-    print("killing, ", processes)
+    logging.info("killing, ", processes)
     # Kill each process
     if len(processes) == 0:
-        print("No v2ray process found")
+        logging.info("No v2ray process found")
         return
     
     for pid in processes:
@@ -407,7 +410,7 @@ def test_google_pings(airport_dicts):
             pings.append(test_http_ping(TEST_HTTP_ADDR, socks_host, socks_port))
         res = min(pings)
 
-        print(f"GOOGLE: {idx} {airport['comments']} with socks5h://{socks_host}:{socks_port} -> {TEST_HTTP_ADDR} = {res} ms")
+        logging.info(f"GOOGLE: {idx} {airport['comments']} with socks5h://{socks_host}:{socks_port} -> {TEST_HTTP_ADDR} = {res} ms")
         google_pings.append(res)
     return google_pings
 
@@ -421,7 +424,7 @@ def test_speeds(airport_dicts):
         speeds.append(res)
         scheme = airport["outbounds"][0]["protocol"]
         address = airport["outbounds"][0]["settings"]["vnext"][0]["address"]
-        print(f"DL: {idx} {airport['comments']} -> {scheme} {address} = {res} Mbps")
+        logging.info(f"DL: {idx} {airport['comments']} -> {scheme} {address} = {res} Mbps")
     return speeds
 
 def create_relay_dict(airport_config, relay_template):#only vmess for now.
@@ -439,7 +442,7 @@ def test_public_ip(airport_dicts):
             res = requests.get("http://ifconfig.me", proxies=proxies, timeout=5).text
         except Exception as e:     
             res = "FAILED"
-        print(f"IP: {idx} {airport['comments']} -> IP = {res}")
+        logging.info(f"IP: {idx} {airport['comments']} -> IP = {res}")
         ips.append(res)
     return ips
 
@@ -455,15 +458,15 @@ def establish_v2ray_connetions(airport_dicts):
             cmd = f"{v2ray_bin} run -c {get_client_config_fn_by_id(idx)}" #using dual jump
             #test file exists?
             if not os.path.exists(get_client_config_fn_by_id(idx)):
-                print(f"file {get_client_config_fn_by_id(idx)} does not exist, skipping.")
+                logging.info(f"file {get_client_config_fn_by_id(idx)} does not exist, skipping.")
                 continue
             else:
-                print(cmd)
+                logging.info(cmd)
             procs.append(subprocess.Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL))
             time.sleep(0.1)
         if airport["outbounds"][0]["protocol"] == "vless":
             cmd = f"{xray_bin} run -c {get_client_config_fn_by_id(idx)}" #using single jump
-            print(cmd)
+            logging.info(cmd)
             procs.append(subprocess.Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL))
             time.sleep(0.1)
     return procs
@@ -495,10 +498,10 @@ def create_sublinks(airport_dicts):
             new_relay_aiport_config["ps"] = new_relay_aiport_config["ps"] + str(count)
             new_relay_aiport_config["port"] = int(new_relay_aiport_config["port"])  + idx
             sublink = base64.b64encode(json.dumps(new_relay_aiport_config).encode()).decode()
-            print(f"{idx} {airport['comments']} -> sublink = {sublink}")
+            logging.info(f"{idx} {airport['comments']} -> sublink = {sublink}")
             total_output_str = total_output_str + "\nvmess://" +  sublink
     total_output_str_b64 = base64.b64encode(total_output_str.encode()).decode()
-    print(total_output_str_b64) 
+    logging.info(total_output_str_b64) 
     return total_output_str_b64
 
 #this program read sublinks from config.json, it will produce client configs for speed and ping test, and relay configs, it follows:
@@ -536,8 +539,8 @@ def post_table_to_server(table, url):
 
     response = requests.post(url, data=json.dumps(data), headers=headers)
 
-    print("Status Code:", response.status_code)
-    print("Response Text:", response.text)
+    logging.info("Status Code:", response.status_code)
+    logging.info("Response Text:", response.text)
 
 
 if __name__ == '__main__':
@@ -546,9 +549,9 @@ if __name__ == '__main__':
     airport_res_dicts = []
     
     #dl sub links   
-    print("Downloading sub links...") 
+    logging.info("Downloading sub links...") 
     contents = get_sub_links(configs["sub_urls"]) #become whole base64
-    print("done DL sub links")
+    logging.info("done DL sub links")
     #parse sub links
     airports = parse_sub_links(contents) #become json of each airport, each "airports” is a jsons of a sub link.
     #convert links b64 to dict
@@ -565,16 +568,16 @@ if __name__ == '__main__':
     #establish v2ray client link
     establish_v2ray_connetions(airport_dicts)
     #test tcp pings
-    print("Testing tcp pings...")
+    logging.info("Testing tcp pings...")
     tcp_pings = test_tcp_pings(airport_dicts)
-    print("done tcp pings")
+    logging.info("done tcp pings")
     #test public ip
-    print("Testing public ip...")
+    logging.info("Testing public ip...")
     public_ips=test_public_ip(airport_dicts)
     #test google pings
-    print("Testing google pings...")
+    logging.info("Testing google pings...")
     google_pings = test_google_pings(airport_dicts)
-    print("done google pings")
+    logging.info("done google pings")
     #test speeds
     #print("Testing dl speeds...")
     do_test_speed = False
@@ -582,7 +585,7 @@ if __name__ == '__main__':
         speed_mbps = test_speeds(airport_dicts) 
     else:
         speed_mbps = [0] * len(google_pings)
-    print("done")
+    logging.info("done")
 
     #build big 2d table of all results, （airport ps, scheme, host, port, tcp ping, google ping, speed mbps）
     for idx, airport in enumerate(airport_dicts):
