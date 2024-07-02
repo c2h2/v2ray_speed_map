@@ -372,6 +372,28 @@ def killall_v2ray():
     for pid in processes:
         os.system(f"kill {pid}")
 
+def direct_ping(url=TEST_HTTP_ADDR, times=3, timeout=5):
+    pings = []
+    for i in range(times):
+        start_time = time.time()
+        try:
+            response = requests.get(url, timeout=timeout)
+            end_time = time.time()
+            duration_ms = (end_time - start_time) * 1000 
+            ping = round(duration_ms)
+        except requests.exceptions.RequestException as e:
+            ping = 9999
+        pings.append(ping)
+    return min(pings)
+
+def direct_ip():
+    ip = "FAILED"
+    try:
+        ip = requests.get("http://ifconfig.me", timeout=5).text.strip()
+    except Exception as e:     
+        ip = "FAILED"
+    return ip
+
 def test_google_pings(airport_dicts):
     google_pings = []
     for idx, airport in enumerate(airport_dicts):

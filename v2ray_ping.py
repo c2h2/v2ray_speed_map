@@ -35,10 +35,15 @@ if __name__ == "__main__":
 
     airport_urls = sys.argv[1:]
 
+    direct_ping = direct_ping()
+    direct_ip = direct_ip()
+
+    print("Testing direct pings: ", direct_ping, "ms. ip: ", direct_ip)
+
     contents = get_sub_links(airport_urls)
 
     airports = parse_sub_links(contents) 
-    print(airports)
+
     airport_dicts = airports_to_dicts(airports)
 
     airport_names = [airport_dict["comments"] for airport_dict in airport_dicts]
@@ -68,6 +73,7 @@ if __name__ == "__main__":
     for i, airport_names in enumerate(airport_names):
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") 
         results.append({"initiator": hostname,"data_type":"remote_test", "name": airport_names, "tcp_ping": tcp_pings[i], "google_ping": google_pings[i], "public_ip": public_ips[i], "created_at": ts})
+    results.append({"initiator": hostname,"data_type":"remote_test", "name": "direct", "tcp_ping": 0, "google_ping": direct_ping, "public_ip": direct_ip, "created_at": ts})
     
     print(results)
 
