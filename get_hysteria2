@@ -1,0 +1,3 @@
+mkdir /opt/bin
+wget -O /opt/bin/hysteria https://download.hysteria.network/app/latest/hysteria-linux-amd64-avx
+chmod a+x /opt/bin/hysteria
