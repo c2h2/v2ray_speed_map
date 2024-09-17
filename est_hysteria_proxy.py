@@ -69,6 +69,23 @@ def test_connection_via_socks(proxy_host='localhost', proxy_port=10810, test_hos
         socks.set_default_proxy()
         socket.socket = socket._socketobject if hasattr(socket, "_socketobject") else socket.SocketType
 
+
+def test_http_ping(url, socks_host, socks_port, timeout=5, times=0):
+    if times >= 3:
+        return 9999
+    try:
+        start_time = time.time()
+        proxies = {'http': f"socks5h://{socks_host}:{socks_port}", 'https': f"socks5h://{socks_host}:{socks_port}"}
+        resp = requests.get(url, proxies=proxies, timeout=timeout)
+        if(resp.status_code == 200 or resp.status_code==302):
+            end_time = time.time()
+            duration_ms = (end_time - start_time) * 1000  # Convert to milliseconds
+        else:
+            return test_http_ping(url, socks_host, socks_port, timeout=timeout, times=times+1)
+        return round(duration_ms, 1)  # Return duration in ms, rounded to 1 decimal place
+    except Exception as e:
+        return test_http_ping(url, socks_host, socks_port, timeout=timeout, times=times+1)
+
 def read_config():
     with open("config.json", "r") as f: 
         configs = json.load(f)
@@ -97,16 +114,18 @@ def parse_sub_links(sub_links):
 def generate_hysteria_configs(hysteria_links, conf_hysteria):
     idx=0
     h_links = [item for sublist in hysteria_links for item in sublist]
+    subprocess.run("rm /opt/hysteria_*.yaml", shell=True)
+    
     for h in h_links:
         comments = h.split("#")[-1]
-        
         decoded_comments = urllib.parse.unquote(comments)
-        print(decoded_comments)
-        print(idx, h)
-        conf = hysteria_link_to_yaml(h, 0)
-        with open(f"/opt/hysteria_{idx}.yaml", "w") as f:
-            f.write(conf)
-        idx += 1
+        if ("美国" in decoded_comments):
+            print(decoded_comments)
+            print(idx, h)
+            conf = hysteria_link_to_yaml(h, 0)
+            with open(f"/opt/hysteria_{idx}.yaml", "w") as f:
+                f.write(conf)
+            idx += 1
 
 def hysteria_link_to_yaml(link, offset):
     socks_port = 10810
@@ -170,7 +189,7 @@ def hysteria_link_to_yaml(link, offset):
 def main():
     directory = "/opt"
     socks_proxy_port = 10810
-    check_interval = 300
+    check_interval = 30
     configs = read_config()
     template_hysteria = configs["template_hysteria"]
     conf_hysteria = open(template_hysteria, "r").read()
@@ -201,22 +220,18 @@ def main():
 
             # Periodically check if the connection via SOCKS proxy is working
             while True:
-                t0 = time.perf_counter()
-                if test_connection_via_socks(proxy_port=socks_proxy_port):
-                    elapsed_time = int((time.perf_counter() - t0)*1000)
+
+                elapsed_time = test_http_ping("http://google.com", "localhost", 10810)
+                if elapsed_time < 4000:
                     print(f"Google ping: {elapsed_time} ms." )
-                    # Connection is working; wait for the next check
                     time.sleep(check_interval)
                 else:
-                    # Connection is not working; restart the client
                     print("Connection via SOCKS proxy failed. Restarting the hysteria client.")
                     # Terminate the current process
                     current_process.terminate()
                     try:
-                        # Wait for the process to terminate
                         current_process.wait(timeout=10)
                     except subprocess.TimeoutExpired:
-                        # Force kill if it doesn't terminate
                         current_process.kill()
                     break  # Break the inner loop to select a new config and restart
     except KeyboardInterrupt:
