@@ -6,6 +6,69 @@ import sys
 import urllib.parse
 import yaml
 import time
+import socket
+import subprocess
+import socks  # You need to install PySocks
+import signal
+import random
+import yaml
+
+def read_yaml(file_path):
+    with open(file_path, 'r') as file:
+        try:
+            data = yaml.safe_load(file)
+            return data
+        except yaml.YAMLError as e:
+            print(f"Error parsing YAML file: {e}")
+            return None
+
+def find_config_files(directory):
+    """
+    Finds all files matching the pattern hysteria_*.yaml in the specified directory.
+    Returns a list of matching file paths.
+    """
+    config_files = []
+    for filename in os.listdir(directory):
+        if filename.startswith('hysteria_') and filename.endswith('.yaml'):
+            config_files.append(os.path.join(directory, filename))
+    return config_files
+
+def start_hysteria_client(config_file):
+    """
+    Starts the hysteria client with the specified configuration file.
+    Returns the subprocess.Popen object representing the client process.
+    """
+    hysteria_executable = '/opt/bin/hysteria'
+    command = [hysteria_executable, '-c', config_file]
+    process = subprocess.Popen(command)
+    print(f"Started hysteria client with config: {config_file}")
+    decoded_comments = urllib.parse.unquote(read_yaml(config_file)["comments"])
+    print(decoded_comments)
+
+    return process
+
+def test_connection_via_socks(proxy_host='localhost', proxy_port=10810, test_host='google.com', test_port=80, timeout=10):
+    """
+    Tests if a connection to test_host:test_port can be made via the SOCKS proxy.
+    Returns True if the connection is successful, False otherwise.
+    """
+    try:
+        # Set up a SOCKS5 proxy
+        socks.set_default_proxy(socks.SOCKS5, proxy_host, proxy_port)
+        socket.socket = socks.socksocket
+
+        # Attempt to connect to the test host and port
+        with socket.create_connection((test_host, test_port), timeout=timeout):
+            print(f"Successfully connected to {test_host}:{test_port} via SOCKS proxy at {proxy_host}:{proxy_port}.")
+            return True
+    except Exception as e:
+        print(f"Failed to connect to {test_host}:{test_port} via SOCKS proxy at {proxy_host}:{proxy_port}: {e}")
+        return False
+    finally:
+        # Reset the socket module to its default state
+        socks.set_default_proxy()
+        socket.socket = socket._socketobject if hasattr(socket, "_socketobject") else socket.SocketType
+
 def read_config():
     with open("config.json", "r") as f: 
         configs = json.load(f)
@@ -31,7 +94,6 @@ def parse_sub_links(sub_links):
         idx += 1
     return ret
 
-# Generate the JSON configuration
 def generate_hysteria_configs(hysteria_links, conf_hysteria):
     idx=0
     h_links = [item for sublist in hysteria_links for item in sublist]
@@ -45,8 +107,6 @@ def generate_hysteria_configs(hysteria_links, conf_hysteria):
         with open(f"/opt/hysteria_{idx}.yaml", "w") as f:
             f.write(conf)
         idx += 1
-
-
 
 def hysteria_link_to_yaml(link, offset):
     socks_port = 10810
@@ -107,14 +167,75 @@ def hysteria_link_to_yaml(link, offset):
 
 
 
-
-
-
-
-if __name__ == "__main__":
+def main():
+    directory = "/opt"
+    socks_proxy_port = 10810
+    check_interval = 300
     configs = read_config()
     template_hysteria = configs["template_hysteria"]
     conf_hysteria = open(template_hysteria, "r").read()
     sub_links = get_sub_links(configs["sub_urls"])
     hysteria_links = parse_sub_links(sub_links)
     generate_hysteria_configs(hysteria_links, conf_hysteria)
+
+
+    config_files = find_config_files(directory)
+    if not config_files:
+        print("No configuration files found matching the pattern hysteria_*.yaml.")
+        sys.exit(1)
+
+    print(f"Found {len(config_files)} configuration files.")
+
+    current_process = None
+
+    try:
+        while True:
+            # Select a random configuration file
+            config_file = random.choice(config_files)
+
+            # Start the hysteria client
+            current_process = start_hysteria_client(config_file)
+
+            # Wait for a short period to allow the client to start
+            time.sleep(2)
+
+            # Periodically check if the connection via SOCKS proxy is working
+            while True:
+                t0 = time.perf_counter()
+                if test_connection_via_socks(proxy_port=socks_proxy_port):
+                    elapsed_time = int((time.perf_counter() - t0)*1000)
+                    print(f"Google ping: {elapsed_time} ms." )
+                    # Connection is working; wait for the next check
+                    time.sleep(check_interval)
+                else:
+                    # Connection is not working; restart the client
+                    print("Connection via SOCKS proxy failed. Restarting the hysteria client.")
+                    # Terminate the current process
+                    current_process.terminate()
+                    try:
+                        # Wait for the process to terminate
+                        current_process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        # Force kill if it doesn't terminate
+                        current_process.kill()
+                    break  # Break the inner loop to select a new config and restart
+    except KeyboardInterrupt:
+        print("Script interrupted by user.")
+    finally:
+        # Clean up: Terminate the hysteria client if it's running
+        if current_process and current_process.poll() is None:
+            print("Terminating hysteria client.")
+            current_process.terminate()
+            try:
+                current_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                current_process.kill()
+        print("Script exited.")
+
+
+
+
+if __name__ == "__main__":
+    main()
+    #now maintian socks proxy
+
