@@ -82,7 +82,7 @@ def test_http_ping(url, socks_host, socks_port, timeout=5, times=0):
             duration_ms = (end_time - start_time) * 1000  # Convert to milliseconds
         else:
             return test_http_ping(url, socks_host, socks_port, timeout=timeout, times=times+1)
-        return round(duration_ms, 1)  # Return duration in ms, rounded to 1 decimal place
+        return round(duration_ms, 0)  # Return duration in ms, rounded to 1 decimal place
     except Exception as e:
         return test_http_ping(url, socks_host, socks_port, timeout=timeout, times=times+1)
 
@@ -191,8 +191,6 @@ def main():
     socks_proxy_port = 10810
     check_interval = 30
     configs = read_config()
-    template_hysteria = configs["template_hysteria"]
-    conf_hysteria = open(template_hysteria, "r").read()
     sub_links = get_sub_links(configs["sub_urls"])
     hysteria_links = parse_sub_links(sub_links)
     generate_hysteria_configs(hysteria_links, conf_hysteria)
@@ -206,7 +204,7 @@ def main():
     print(f"Found {len(config_files)} configuration files.")
 
     current_process = None
-
+    switch_cnt = 0
     try:
         while True:
             # Select a random configuration file
@@ -223,9 +221,12 @@ def main():
 
                 elapsed_time = test_http_ping("http://google.com", "localhost", 10810)
                 if elapsed_time < 4000:
-                    print(f"Google ping: {elapsed_time} ms." )
+                    server_name = urllib.parse.unquote(read_yaml(config_file)["comments"])
+                    print(server_name)
+                    print(f"Google ping: {elapsed_time} ms. config file is: {config_file}, switched {switch_cnt} times." )
                     time.sleep(check_interval)
                 else:
+                    switch_cnt += 1 
                     print("Connection via SOCKS proxy failed. Restarting the hysteria client.")
                     # Terminate the current process
                     current_process.terminate()
@@ -246,7 +247,7 @@ def main():
             except subprocess.TimeoutExpired:
                 current_process.kill()
         print("Script exited.")
-
+        
 
 
 
