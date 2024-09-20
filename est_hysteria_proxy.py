@@ -111,7 +111,7 @@ def parse_sub_links(sub_links):
         idx += 1
     return ret
 
-def generate_hysteria_configs(hysteria_links, conf_hysteria):
+def generate_hysteria_configs(hysteria_links):
     idx=0
     h_links = [item for sublist in hysteria_links for item in sublist]
     subprocess.run("rm /opt/hysteria_*.yaml", shell=True)
@@ -193,7 +193,7 @@ def main():
     configs = read_config()
     sub_links = get_sub_links(configs["sub_urls"])
     hysteria_links = parse_sub_links(sub_links)
-    generate_hysteria_configs(hysteria_links, conf_hysteria)
+    generate_hysteria_configs(hysteria_links)
 
 
     config_files = find_config_files(directory)
