@@ -119,7 +119,8 @@ def generate_hysteria_configs(hysteria_links):
     for h in h_links:
         comments = h.split("#")[-1]
         decoded_comments = urllib.parse.unquote(comments)
-        if ("美国" in decoded_comments):
+        #if ("美国" in decoded_comments):
+        if ("0.1" in decoded_comments):
             print(decoded_comments)
             print(idx, h)
             conf = hysteria_link_to_yaml(h, 0)
@@ -194,7 +195,6 @@ def main():
     sub_links = get_sub_links(configs["sub_urls"])
     hysteria_links = parse_sub_links(sub_links)
     generate_hysteria_configs(hysteria_links)
-
 
     config_files = find_config_files(directory)
     if not config_files:
