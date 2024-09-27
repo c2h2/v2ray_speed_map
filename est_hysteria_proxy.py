@@ -9,9 +9,14 @@ import time
 import socket
 import subprocess
 import socks  # You need to install PySocks
-import signal
 import random
 import yaml
+
+directory = "/opt"
+socks_port = 10810
+http_port = 11810
+hysteria_prefix = "prov2_hysteria"
+vless_prefix = "prov2_vless"
 
 def read_yaml(file_path):
     with open(file_path, 'r') as file:
@@ -29,7 +34,7 @@ def find_config_files(directory):
     """
     config_files = []
     for filename in os.listdir(directory):
-        if filename.startswith('hysteria_') and filename.endswith('.yaml'):
+        if filename.startswith(hysteria_prefix) and filename.endswith('.yaml'):
             config_files.append(os.path.join(directory, filename))
     return config_files
 
@@ -99,102 +104,222 @@ def get_sub_links(urls):
     return contents
 
 def parse_sub_links(sub_links):
-    ret = []
-    idx = 0
+    ret = {}
     for sub_link in sub_links:
-        ret.append([])
         sub = base64.b64decode(sub_link).decode("utf-8")
         sub_lines = sub.split("\n")
         for sub_line in sub_lines:
-            if "hysteria" in sub_line:
-                ret[idx].append(sub_line)
-        idx += 1
+            sub_schema = sub_line.split(":")[0]
+            if sub_schema not in ret:
+                ret[sub_schema] = []
+            ret[sub_schema].append(sub_line.strip())
     return ret
 
-def generate_hysteria_configs(hysteria_links):
-    idx=0
-    h_links = [item for sublist in hysteria_links for item in sublist]
-    subprocess.run("rm /opt/hysteria_*.yaml", shell=True)
-    
-    for h in h_links:
-        comments = h.split("#")[-1]
-        decoded_comments = urllib.parse.unquote(comments)
-        #if ("美国" in decoded_comments):
-        if ("0.1" in decoded_comments):
-            print(decoded_comments)
-            print(idx, h)
-            conf = hysteria_link_to_yaml(h, 0)
-            with open(f"/opt/hysteria_{idx}.yaml", "w") as f:
-                f.write(conf)
-            idx += 1
 
-def hysteria_link_to_yaml(link, offset):
-    socks_port = 10810
-    http_port = 11810
-    parsed_link = urllib.parse.urlparse(link)
-    auth = parsed_link.username
-    hostname = parsed_link.hostname
-    port = parsed_link.port
-    query_params = urllib.parse.parse_qs(parsed_link.query)
-    comments = parsed_link.fragment
-    # Handle multiple ports (mport) if present
-    if 'mport' in query_params:
-        mport = query_params['mport'][0]
-        server = f"{hostname}:{mport}"
+def generate_vless_config(links):
+    subprocess.run(f"rm /opt/{vless_prefix}*.json", shell=True)
+    
+    if type(links) == str:
+        links = [links]
+        ret_array = False
     else:
-        server = f"{hostname}:{port}"
+        ret_array = True
     
-    # Extract TLS parameters
-    tls = {}
-    tls['insecure'] = query_params.get('insecure', ['0'])[0] == '1'
-    tls['sni'] = query_params.get('sni', [''])[0]
+    fns = []
+    for idx, link in enumerate(links):
+        print(link)
+      
+        parsed_link = urllib.parse.urlparse(link)
+        
+        # Extract parameters from the parsed link
+        auth = parsed_link.username
+        hostname = parsed_link.hostname
+        port = parsed_link.port
+        query_params = urllib.parse.parse_qs(parsed_link.query)
+
+        # Extract TLS parameters, including sni and flow
+        sni = query_params.get('sni', [''])[0]
+        flow = query_params.get('flow', [''])[0]
+        comments = link.split("#")[1]
+
+        # Handle multiple ports (mport) if present
+        if 'mport' in query_params:
+            mport = query_params['mport'][0]
+            server = f"{hostname}:{mport}"
+        else:
+            server = f"{hostname}:{port}"
+
+        # Extract TLS parameters
+        tls_settings = {
+            "fingerprint": "chrome",
+            "serverName": query_params.get('sni', [''])[0],
+            "allowInsecure": query_params.get('insecure', ['0'])[0] == '1'
+        }
+        
+        # Build the configuration dictionary
+        config = {
+            "dns": {
+                "servers": ["1.1.1.1"]
+            },
+            "inbounds": [
+                {
+                    "port": socks_port,
+                    "listen": "127.0.0.1",
+                    "protocol": "socks",
+                    "sniffing": {
+                        "enabled": True,
+                        "destOverride": ["http", "tls"]
+                    },
+                    "settings": {
+                        "udp": True
+                    }
+                },
+                {
+                    "port": http_port,
+                    "listen": "127.0.0.1",
+                    "protocol": "http",
+                    "sniffing": {
+                        "enabled": True,
+                        "destOverride": ["http", "tls"]
+                    },
+                    "settings": {
+                        "allowTransparent": True
+                    }
+                }
+            ],
+            "outbounds": [
+                {
+                    "comments": comments,
+                    "protocol": "vless",
+                    "settings": {
+                        "vnext": [
+                            {
+                                "port": port,
+                                "users": [
+                                    {
+                                        "flow": "xtls-rprx-vision",
+                                        "encryption": "none",
+                                        "id": auth,
+                                        "level": 0
+                                    }
+                                ],
+                                "address": hostname
+                            }
+                        ]
+                    },
+                    "streamSettings": {
+                        "network": "tcp",
+                        "tlsSettings": {
+                            "serverName": sni,
+                            "allowInsecure": False
+                        },
+                        "tcpSettings": {
+                            "header": {
+                                "type": "none"
+                            }
+                        },
+                        "sockopt": {
+                            "mark": 255
+                        },
+                        "security": "tls"
+                    },
+                    "mux": {
+                        "enabled": False
+                    }
+                }
+            ]
+        }
+        
+        # Convert the configuration dictionary to JSON
+        json_config = json.dumps(config, indent=4)
+        fn = f"/opt/{vless_prefix}_{idx}.json"
+        fns.append(fn)
+        print(json_config)
+        print(fn)
+        with open(fn, "w") as f:
+            f.write(json_config)
+        
+    return fns
+
+def generate_hysteria_configs(links):
+    subprocess.run(f"rm /opt/{hysteria_prefix}*.yaml", shell=True)
+    if type(links) == str:
+        links = [links]
+        ret_array = False
+    else:
+        ret_array = True
     
-    # Build the configuration dictionary
-    config = {
-        'server': server,
-        'auth': auth,
-        'tls': tls,
-        'transport': {
-            'type': 'udp',
-            'udp': {
-                'hopInterval': '30s'
-            }
-        },
-        'quic': {
-            'initStreamReceiveWindow': 8388608,
-            'maxStreamReceiveWindow': 8388608,
-            'initConnReceiveWindow': 20971520,
-            'maxConnReceiveWindow': 20971520,
-            'maxIdleTimeout': '30s',
-            'keepAlivePeriod': '10s',
-            'disablePathMTUDiscovery': True
-        },
-        'fastOpen': True,
-        'lazy': True,
-        'socks5': {
-            'listen': f'127.0.0.1:{socks_port + offset}'
-        },
-        'http': {
-            'listen': f'127.0.0.1:{http_port + offset}'
-        },
-        'comments': comments,
-    }
-    
-    # Convert the configuration dictionary to YAML
-    yaml_config = yaml.dump(config, sort_keys=False, default_flow_style=False, allow_unicode=True)
-    
-    return yaml_config
+    fns = []
+    for idx, link in enumerate(links):
+        port_offset = 0 #we use the same http and socks port for all sub links.
+        parsed_link = urllib.parse.urlparse(link)
+        auth = parsed_link.username
+        hostname = parsed_link.hostname
+        port = parsed_link.port
+        query_params = urllib.parse.parse_qs(parsed_link.query)
+        comments = parsed_link.fragment
+        # Handle multiple ports (mport) if present
+        if 'mport' in query_params:
+            mport = query_params['mport'][0]
+            server = f"{hostname}:{mport}"
+        else:
+            server = f"{hostname}:{port}"
+        
+        # Extract TLS parameters
+        tls = {}
+        tls['insecure'] = query_params.get('insecure', ['0'])[0] == '1'
+        tls['sni'] = query_params.get('sni', [''])[0]
+        
+        # Build the configuration dictionary
+        config = {
+            'server': server,
+            'auth': auth,
+            'tls': tls,
+            'transport': {
+                'type': 'udp',
+                'udp': {
+                    'hopInterval': '30s'
+                }
+            },
+            'quic': {
+                'initStreamReceiveWindow': 8388608,
+                'maxStreamReceiveWindow': 8388608,
+                'initConnReceiveWindow': 20971520,
+                'maxConnReceiveWindow': 20971520,
+                'maxIdleTimeout': '30s',
+                'keepAlivePeriod': '10s',
+                'disablePathMTUDiscovery': True
+            },
+            'fastOpen': True,
+            'lazy': True,
+            'socks5': {
+                'listen': f'127.0.0.1:{socks_port + port_offset}'
+            },
+            'http': {
+                'listen': f'127.0.0.1:{http_port + port_offset}'
+            },
+            'comments': comments,
+        }
+        
+        # Convert the configuration dictionary to YAML
+        yaml_config = yaml.dump(config, sort_keys=False, default_flow_style=False, allow_unicode=True)
+        fn = f"/opt/{hysteria_prefix}_{idx}.yaml"
+        fns.append(fn)
+        with open(fn, "w") as f:
+            f.write(yaml_config)
+    return fns if ret_array else fns[0]
 
 
 
 def main():
-    directory = "/opt"
-    socks_proxy_port = 10810
+
     check_interval = 30
     configs = read_config()
-    sub_links = get_sub_links(configs["sub_urls"])
-    hysteria_links = parse_sub_links(sub_links)
-    generate_hysteria_configs(hysteria_links)
+    sub_link_content = get_sub_links(configs["sub_urls"])
+    sub_links = parse_sub_links(sub_link_content)
+    flatten_sub_links = [item for sublist in sub_links.values() for item in sublist]
+    generate_hysteria_configs(sub_links["hysteria2"])
+    generate_vless_config(sub_links["vless"])
 
     config_files = find_config_files(directory)
     if not config_files:
