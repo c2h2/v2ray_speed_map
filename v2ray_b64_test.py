@@ -33,7 +33,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     
-    conf = json.loads(base64.b64decode(b64_aiport).decode('utf-8'))
+    conf = json.loads(b64_force_decode(b64_aiport).decode('utf-8'))
     conf["inbounds"][0]["port"] = 9888
     json.dump(conf, open(fn, "w"), indent=4)
 

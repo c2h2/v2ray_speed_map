@@ -102,7 +102,7 @@ def parse_sub_links(contents):
                 if scheme == 'vless':
                     pass #update later in functions.
                 if scheme == 'ss' or scheme == 'ssr':
-                    ss_config = base64.b64decode(node_b64).decode("utf-8")
+                    ss_config = b64_force_decode(node_b64).decode("utf-8")
                     airport["add"] = ss_config.split("@")[1].split(":")[0]
                     airport["port"] = ss_config.split("@")[1].split(":")[1]
                     airport["ps"] = ss_config.split("@")[0]
