@@ -395,7 +395,7 @@ def direct_ping(url=TEST_HTTP_ADDR, times=3, timeout=5):
 def direct_ip():
     ip = "FAILED"
     try:
-        ip = requests.get("http://ifconfig.me", timeout=5).text.strip()
+        ip = requests.get("https://4.photonicat.com/ip.php", timeout=10).text.strip()
     except Exception as e:     
         ip = "FAILED"
     return ip
