@@ -80,3 +80,6 @@ Contributions to `v2ray_speed_map` are welcome. To contribute:
 4. Push to the branch (`git push origin feature/YourFeature`).
 5. Create a new Pull Request.
 
+
+## local socks5 estiablishment.
+python3 est_hysteria_proxy.py 
